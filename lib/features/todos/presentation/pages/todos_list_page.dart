@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../application/todo_filter.dart';
@@ -21,25 +22,35 @@ class TodosListPage extends ConsumerWidget {
     final syncState = ref.watch(todosSyncControllerProvider);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My Todos'),
+        titleSpacing: 16,
+        centerTitle: false,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SvgPicture.asset(
+              'assets/white_transparent_logo.svg',
+              height: 24,
+              colorFilter: const ColorFilter.mode(
+                Colors.white,
+                BlendMode.srcIn,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Text('DOFOX'),
+          ],
+        ),
         actions: [
           _buildSyncButton(context, ref, syncState),
           _buildOverflowMenu(context, ref, syncState),
         ],
       ),
       body: todosAsync.when(
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stack) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.error_outline,
-                size: 48,
-                color: AppColors.error,
-              ),
+              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
               const SizedBox(height: 16),
               Text(
                 error.toString(),
@@ -120,16 +131,19 @@ class TodosListPage extends ConsumerWidget {
 
   Future<void> _performSync(BuildContext context, WidgetRef ref) async {
     try {
-      final result =
-          await ref.read(todosSyncControllerProvider.notifier).syncNow();
+      final result = await ref
+          .read(todosSyncControllerProvider.notifier)
+          .syncNow();
       if (!context.mounted) return;
       switch (result) {
         case SyncSuccess(processedCount: final count):
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(count > 0
-                  ? 'Synced $count item${count > 1 ? 's' : ''}'
-                  : 'Already up to date'),
+              content: Text(
+                count > 0
+                    ? 'Synced $count item${count > 1 ? 's' : ''}'
+                    : 'Already up to date',
+              ),
               duration: const Duration(seconds: 2),
               backgroundColor: AppColors.success,
             ),
@@ -157,16 +171,19 @@ class TodosListPage extends ConsumerWidget {
 
   Future<void> _performImport(BuildContext context, WidgetRef ref) async {
     try {
-      final result =
-          await ref.read(todosSyncControllerProvider.notifier).importFromApi();
+      final result = await ref
+          .read(todosSyncControllerProvider.notifier)
+          .importFromApi();
       if (!context.mounted) return;
       switch (result) {
         case SyncSuccess(processedCount: final count):
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(count > 0
-                  ? 'Imported $count todo${count > 1 ? 's' : ''} from API'
-                  : 'No new todos to import'),
+              content: Text(
+                count > 0
+                    ? 'Imported $count todo${count > 1 ? 's' : ''} from API'
+                    : 'No new todos to import',
+              ),
               duration: const Duration(seconds: 2),
               backgroundColor: AppColors.success,
             ),
@@ -201,7 +218,9 @@ class TodosListPage extends ConsumerWidget {
     final filteredTodos = _filterTodos(todos, filter);
     final activeCount = todos.where((t) => !t.completed).length;
     final completedCount = todos.where((t) => t.completed).length;
-    final pendingCount = todos.where((t) => t.syncState == SyncState.pending).length;
+    final pendingCount = todos
+        .where((t) => t.syncState == SyncState.pending)
+        .length;
     return Column(
       children: [
         _buildFilterChips(ref, filter),
@@ -249,9 +268,7 @@ class TodosListPage extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.divider),
-        ),
+        border: Border(bottom: BorderSide(color: AppColors.divider)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -333,8 +350,9 @@ class TodosListPage extends ConsumerWidget {
         final todo = todos[index];
         return TodoListItem(
           todo: todo,
-          onToggle: () =>
-              ref.read(todosControllerProvider.notifier).toggleCompleted(todo.id),
+          onToggle: () => ref
+              .read(todosControllerProvider.notifier)
+              .toggleCompleted(todo.id),
           onDismissed: () =>
               ref.read(todosControllerProvider.notifier).deleteTodo(todo.id),
         );

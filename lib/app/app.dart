@@ -13,7 +13,7 @@ class AppRoot extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(goRouterProvider);
     return MaterialApp.router(
-      title: 'Todo',
+      title: 'DOFOX',
       theme: AppTheme.light,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
