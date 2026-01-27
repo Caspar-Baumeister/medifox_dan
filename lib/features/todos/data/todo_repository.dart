@@ -1,23 +1,23 @@
 import '../domain/todo.dart';
 
 /// Repository interface for todo data operations.
-/// Implementation will be provided in future steps.
-abstract interface class TodoRepository {
-  /// Retrieves all todos.
-  Future<List<Todo>> getTodos();
+/// Defines the contract for data access without implementation details.
+abstract class TodoRepository {
+  /// Watches all non-deleted todos as a stream.
+  Stream<List<Todo>> watchTodos();
 
-  /// Retrieves a single todo by its id.
-  Future<Todo?> getTodoById(String id);
+  /// Creates a new todo.
+  Future<void> create(Todo todo);
 
-  /// Creates a new todo and returns the created todo.
-  Future<Todo> createTodo(Todo todo);
+  /// Updates an existing todo.
+  Future<void> update(Todo todo);
 
-  /// Updates an existing todo and returns the updated todo.
-  Future<Todo> updateTodo(Todo todo);
+  /// Toggles the completed status of a todo.
+  Future<void> toggleCompleted(String id);
 
-  /// Deletes a todo by its id.
-  Future<void> deleteTodo(String id);
+  /// Soft deletes a todo (marks as deleted).
+  Future<void> delete(String id);
 
-  /// Toggles the completion status of a todo.
-  Future<Todo> toggleTodoCompletion(String id);
+  /// Returns the count of non-deleted todos.
+  Future<int> count();
 }

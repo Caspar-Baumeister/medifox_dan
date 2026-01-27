@@ -2,53 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../application/todo_filter.dart';
 import '../../application/todos_controller.dart';
-import '../../application/todos_state.dart';
+import '../../application/todos_providers.dart';
+import '../../domain/todo.dart';
 import '../widgets/todo_list_item.dart';
 
 /// The main page displaying the list of todos.
-class TodosListPage extends ConsumerStatefulWidget {
+class TodosListPage extends ConsumerWidget {
   const TodosListPage({super.key});
 
   @override
-  ConsumerState<TodosListPage> createState() => _TodosListPageState();
-}
-
-class _TodosListPageState extends ConsumerState<TodosListPage> {
-  @override
-  void initState() {
-    super.initState();
-    // Load todos when the page is first displayed
-    Future.microtask(
-      () => ref.read(todosControllerProvider.notifier).loadTodos(),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(todosControllerProvider);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final todosAsync = ref.watch(todosStreamProvider);
+    final filter = ref.watch(todoFilterProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Todos'),
       ),
-      body: _buildBody(state),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onAddTodoPressed,
-        tooltip: 'Add Todo',
-        child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildBody(TodosState state) {
-    return switch (state) {
-      TodosInitial() => const Center(
-          child: Text('Welcome! Loading your todos...'),
-        ),
-      TodosLoading() => const Center(
+      body: todosAsync.when(
+        loading: () => const Center(
           child: CircularProgressIndicator(),
         ),
-      TodosError(message: final message) => Center(
+        error: (error, stack) => Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -59,49 +35,71 @@ class _TodosListPageState extends ConsumerState<TodosListPage> {
               ),
               const SizedBox(height: 16),
               Text(
-                message,
+                error.toString(),
                 style: const TextStyle(color: AppColors.textSecondary),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () =>
-                    ref.read(todosControllerProvider.notifier).loadTodos(),
+                onPressed: () => ref.invalidate(todosStreamProvider),
                 child: const Text('Retry'),
               ),
             ],
           ),
         ),
-      TodosLoaded() => _buildLoadedContent(state),
-    };
+        data: (todos) => _buildLoadedContent(context, ref, todos, filter),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showAddTodoDialog(context, ref),
+        tooltip: 'Add Todo',
+        child: const Icon(Icons.add),
+      ),
+    );
   }
 
-  Widget _buildLoadedContent(TodosLoaded state) {
+  Widget _buildLoadedContent(
+    BuildContext context,
+    WidgetRef ref,
+    List<Todo> todos,
+    TodoFilter filter,
+  ) {
+    final filteredTodos = _filterTodos(todos, filter);
+    final activeCount = todos.where((t) => !t.completed).length;
+    final completedCount = todos.where((t) => t.completed).length;
     return Column(
       children: [
-        _buildFilterChips(state),
-        _buildStatsBar(state),
+        _buildFilterChips(ref, filter),
+        _buildStatsBar(activeCount, completedCount),
         Expanded(
-          child: state.filteredTodos.isEmpty
-              ? _buildEmptyState(state.selectedFilter)
-              : _buildTodosList(state.filteredTodos),
+          child: filteredTodos.isEmpty
+              ? _buildEmptyState(filter)
+              : _buildTodosList(ref, filteredTodos),
         ),
       ],
     );
   }
 
-  Widget _buildFilterChips(TodosLoaded state) {
+  List<Todo> _filterTodos(List<Todo> todos, TodoFilter filter) {
+    return switch (filter) {
+      TodoFilter.all => todos,
+      TodoFilter.active => todos.where((t) => !t.completed).toList(),
+      TodoFilter.completed => todos.where((t) => t.completed).toList(),
+    };
+  }
+
+  Widget _buildFilterChips(WidgetRef ref, TodoFilter selectedFilter) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: TodoFilter.values.map((filter) {
-          final isSelected = state.selectedFilter == filter;
+          final isSelected = selectedFilter == filter;
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: FilterChip(
               label: Text(filter.label),
               selected: isSelected,
               onSelected: (_) =>
-                  ref.read(todosControllerProvider.notifier).setFilter(filter),
+                  ref.read(todoFilterProvider.notifier).state = filter,
               selectedColor: AppColors.primary.withValues(alpha: 0.2),
               checkmarkColor: AppColors.primary,
             ),
@@ -111,7 +109,7 @@ class _TodosListPageState extends ConsumerState<TodosListPage> {
     );
   }
 
-  Widget _buildStatsBar(TodosLoaded state) {
+  Widget _buildStatsBar(int activeCount, int completedCount) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
@@ -123,14 +121,14 @@ class _TodosListPageState extends ConsumerState<TodosListPage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            '${state.activeCount} remaining',
+            '$activeCount remaining',
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 14,
             ),
           ),
           Text(
-            '${state.completedCount} completed',
+            '$completedCount completed',
             style: const TextStyle(
               color: AppColors.textSecondary,
               fontSize: 14,
@@ -172,7 +170,7 @@ class _TodosListPageState extends ConsumerState<TodosListPage> {
     );
   }
 
-  Widget _buildTodosList(List todos) {
+  Widget _buildTodosList(WidgetRef ref, List<Todo> todos) {
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 80),
       itemCount: todos.length,
@@ -181,22 +179,52 @@ class _TodosListPageState extends ConsumerState<TodosListPage> {
         final todo = todos[index];
         return TodoListItem(
           todo: todo,
-          onToggle: () => ref
-              .read(todosControllerProvider.notifier)
-              .toggleTodoCompletion(todo.id),
+          onToggle: () =>
+              ref.read(todosControllerProvider.notifier).toggleCompleted(todo.id),
           onDismissed: () =>
-              ref.read(todosControllerProvider.notifier).removeTodo(todo.id),
+              ref.read(todosControllerProvider.notifier).deleteTodo(todo.id),
         );
       },
     );
   }
 
-  void _onAddTodoPressed() {
-    // TODO: Implement add todo dialog/page
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Add todo feature coming soon!'),
-        duration: Duration(seconds: 2),
+  void _showAddTodoDialog(BuildContext context, WidgetRef ref) {
+    final textController = TextEditingController();
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Add Todo'),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'What needs to be done?',
+            border: OutlineInputBorder(),
+          ),
+          textCapitalization: TextCapitalization.sentences,
+          onSubmitted: (value) {
+            if (value.trim().isNotEmpty) {
+              ref.read(todosControllerProvider.notifier).addTodo(value.trim());
+              Navigator.of(context).pop();
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final title = textController.text.trim();
+              if (title.isNotEmpty) {
+                ref.read(todosControllerProvider.notifier).addTodo(title);
+                Navigator.of(context).pop();
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
       ),
     );
   }

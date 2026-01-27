@@ -43,73 +43,40 @@ class TodoListItem extends StatelessWidget {
       child: ListTile(
         onTap: onTap,
         leading: Checkbox(
-          value: todo.isCompleted,
+          value: todo.completed,
           onChanged: (_) => onToggle(),
         ),
         title: Text(
           todo.title,
           style: TextStyle(
-            decoration: todo.isCompleted ? TextDecoration.lineThrough : null,
-            color: todo.isCompleted ? AppColors.textSecondary : AppColors.text,
+            decoration: todo.completed ? TextDecoration.lineThrough : null,
+            color: todo.completed ? AppColors.textSecondary : AppColors.text,
           ),
         ),
-        subtitle: todo.description != null
-            ? Text(
-                todo.description!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  decoration:
-                      todo.isCompleted ? TextDecoration.lineThrough : null,
-                  color: AppColors.textSecondary,
-                ),
-              )
-            : null,
-        trailing: _buildDueDateBadge(),
+        subtitle: _buildSubtitle(),
       ),
     );
   }
 
-  Widget? _buildDueDateBadge() {
-    if (todo.dueDate == null || todo.isCompleted) return null;
-    final now = DateTime.now();
-    final isOverdue = todo.dueDate!.isBefore(now);
-    final isDueSoon = todo.dueDate!.difference(now).inDays <= 1;
-    Color badgeColor;
-    if (isOverdue) {
-      badgeColor = AppColors.error;
-    } else if (isDueSoon) {
-      badgeColor = Colors.orange;
-    } else {
-      badgeColor = AppColors.secondary;
-    }
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: badgeColor.withValues(alpha: 0.15),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        _formatDueDate(todo.dueDate!),
-        style: TextStyle(
-          fontSize: 12,
-          color: badgeColor,
-          fontWeight: FontWeight.w500,
-        ),
+  Widget? _buildSubtitle() {
+    final formattedDate = _formatRelativeDate(todo.updatedAt);
+    return Text(
+      formattedDate,
+      style: const TextStyle(
+        color: AppColors.textSecondary,
+        fontSize: 12,
       ),
     );
   }
 
-  String _formatDueDate(DateTime date) {
+  String _formatRelativeDate(DateTime date) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final dueDay = DateTime(date.year, date.month, date.day);
-    final difference = dueDay.difference(today).inDays;
-    if (difference == 0) return 'Today';
-    if (difference == 1) return 'Tomorrow';
-    if (difference == -1) return 'Yesterday';
-    if (difference < -1) return '${-difference}d overdue';
-    if (difference <= 7) return 'In ${difference}d';
-    return '${date.day}/${date.month}';
+    final dateDay = DateTime(date.year, date.month, date.day);
+    final difference = today.difference(dateDay).inDays;
+    if (difference == 0) return 'Updated today';
+    if (difference == 1) return 'Updated yesterday';
+    if (difference < 7) return 'Updated $difference days ago';
+    return 'Updated ${date.day}/${date.month}/${date.year}';
   }
 }

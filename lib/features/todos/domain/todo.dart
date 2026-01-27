@@ -1,49 +1,60 @@
+import 'package:uuid/uuid.dart';
+
 /// Represents a todo item in the domain layer.
 /// This is a pure model with no Flutter dependencies.
 class Todo {
   const Todo({
     required this.id,
     required this.title,
-    this.description,
-    this.isCompleted = false,
-    this.createdAt,
-    this.dueDate,
+    required this.completed,
+    required this.createdAt,
+    required this.updatedAt,
   });
 
-  /// Unique identifier for the todo.
+  /// Creates a new todo with a generated UUID and current timestamps.
+  factory Todo.create({required String title}) {
+    final now = DateTime.now();
+    return Todo(
+      id: const Uuid().v4(),
+      title: title,
+      completed: false,
+      createdAt: now,
+      updatedAt: now,
+    );
+  }
+
+  /// Unique identifier for the todo (UUID v4).
   final String id;
 
   /// Title of the todo.
   final String title;
 
-  /// Optional description with additional details.
-  final String? description;
-
   /// Whether the todo has been completed.
-  final bool isCompleted;
+  final bool completed;
 
   /// Timestamp when the todo was created.
-  final DateTime? createdAt;
+  final DateTime createdAt;
 
-  /// Optional due date for the todo.
-  final DateTime? dueDate;
+  /// Timestamp when the todo was last updated.
+  final DateTime updatedAt;
 
   /// Creates a copy of this todo with the given fields replaced.
+  /// Automatically updates updatedAt when relevant fields change.
   Todo copyWith({
     String? id,
     String? title,
-    String? description,
-    bool? isCompleted,
+    bool? completed,
     DateTime? createdAt,
-    DateTime? dueDate,
+    DateTime? updatedAt,
   }) {
+    final hasRelevantChanges = title != null || completed != null;
     return Todo(
       id: id ?? this.id,
       title: title ?? this.title,
-      description: description ?? this.description,
-      isCompleted: isCompleted ?? this.isCompleted,
+      completed: completed ?? this.completed,
       createdAt: createdAt ?? this.createdAt,
-      dueDate: dueDate ?? this.dueDate,
+      updatedAt:
+          updatedAt ?? (hasRelevantChanges ? DateTime.now() : this.updatedAt),
     );
   }
 
@@ -53,19 +64,18 @@ class Todo {
     return other is Todo &&
         other.id == id &&
         other.title == title &&
-        other.description == description &&
-        other.isCompleted == isCompleted &&
+        other.completed == completed &&
         other.createdAt == createdAt &&
-        other.dueDate == dueDate;
+        other.updatedAt == updatedAt;
   }
 
   @override
   int get hashCode {
-    return Object.hash(id, title, description, isCompleted, createdAt, dueDate);
+    return Object.hash(id, title, completed, createdAt, updatedAt);
   }
 
   @override
   String toString() {
-    return 'Todo(id: $id, title: $title, isCompleted: $isCompleted)';
+    return 'Todo(id: $id, title: $title, completed: $completed)';
   }
 }
