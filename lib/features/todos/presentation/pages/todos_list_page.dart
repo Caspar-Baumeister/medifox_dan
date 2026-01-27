@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/errors/app_error.dart';
+import '../../../../core/ui/toast/toast_service.dart';
 import '../../application/todo_filter.dart';
 import '../../application/todos_controller.dart';
 import '../../application/todos_providers.dart';
@@ -22,7 +23,7 @@ class TodosListPage extends ConsumerWidget {
     final filter = ref.watch(todoFilterProvider);
     final syncState = ref.watch(todosSyncControllerProvider);
 
-    // Listen for sync errors and show SnackBar
+    // Listen for sync errors and show toast
     ref.listen<AsyncValue<SyncSummary?>>(todosSyncControllerProvider, (
       previous,
       next,
@@ -32,18 +33,7 @@ class TodosListPage extends ConsumerWidget {
         final message = error is AppError
             ? error.userMessage
             : 'An unexpected error occurred';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(message),
-            backgroundColor: AppColors.error,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'Retry',
-              textColor: AppColors.white,
-              onPressed: () => _performSync(context, ref),
-            ),
-          ),
-        );
+        ToastService.error(context, message);
       }
     });
 
@@ -188,24 +178,16 @@ class TodosListPage extends ConsumerWidget {
         return;
       }
 
-      // Show success message
+      // Show success toast
       final message = summary.succeeded > 0
           ? 'Synced ${summary.succeeded} item${summary.succeeded > 1 ? 's' : ''}'
           : 'Already up to date';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            summary.failed > 0
-                ? '$message (${summary.failed} failed)'
-                : message,
-          ),
-          duration: const Duration(seconds: 2),
-          backgroundColor: summary.failed > 0
-              ? AppColors.warning
-              : AppColors.success,
-        ),
-      );
+      if (summary.failed > 0) {
+        ToastService.warning(context, '$message (${summary.failed} failed)');
+      } else {
+        ToastService.success(context, message);
+      }
     } catch (_) {
       // Errors are handled via the listener
     }
@@ -225,18 +207,12 @@ class TodosListPage extends ConsumerWidget {
         return;
       }
 
-      // Show success message
+      // Show success toast
       final message = summary.succeeded > 0
           ? 'Imported ${summary.succeeded} todo${summary.succeeded > 1 ? 's' : ''} from API'
           : 'No new todos to import';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 2),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      ToastService.success(context, message);
     } catch (_) {
       // Errors are handled via the listener
     }
@@ -524,13 +500,7 @@ class TodosListPage extends ConsumerWidget {
     } catch (e) {
       if (!context.mounted) return;
       final message = e is AppError ? e.userMessage : 'Failed to rename';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 3),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      ToastService.error(context, message);
     }
   }
 }

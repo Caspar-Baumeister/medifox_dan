@@ -76,12 +76,14 @@ class SyncOperationsTable extends Table {
 class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
   TodosDao(super.db);
 
-  /// Watches all non-deleted todos, ordered by updated_at descending.
+  /// Watches all non-deleted todos, ordered by created_at descending.
+  /// Using createdAt keeps the list stable when items are updated.
   Stream<List<TodosTableData>> watchTodos() {
     return (select(todosTable)
           ..where((t) => t.isDeleted.equals(false))
           ..orderBy([
-            (t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
           ]))
         .watch();
   }
@@ -91,15 +93,17 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
     return (select(todosTable)
           ..where((t) => t.isDeleted.equals(false))
           ..orderBy([
-            (t) => OrderingTerm(expression: t.updatedAt, mode: OrderingMode.desc)
+            (t) =>
+                OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
           ]))
         .get();
   }
 
   /// Gets a single todo by local ID.
   Future<TodosTableData?> getTodoById(String localId) {
-    return (select(todosTable)..where((t) => t.localId.equals(localId)))
-        .getSingleOrNull();
+    return (select(
+      todosTable,
+    )..where((t) => t.localId.equals(localId))).getSingleOrNull();
   }
 
   /// Inserts a new todo.
@@ -114,9 +118,9 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
 
   /// Updates an existing todo.
   Future<void> updateTodo(TodosTableCompanion todo) {
-    return (update(todosTable)
-          ..where((t) => t.localId.equals(todo.localId.value)))
-        .write(todo);
+    return (update(
+      todosTable,
+    )..where((t) => t.localId.equals(todo.localId.value))).write(todo);
   }
 
   /// Marks a todo as pending sync.
@@ -175,12 +179,16 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
 
   /// Gets a todo by its remote ID.
   Future<TodosTableData?> getTodoByRemoteId(int remoteId) {
-    return (select(todosTable)..where((t) => t.remoteId.equals(remoteId)))
-        .getSingleOrNull();
+    return (select(
+      todosTable,
+    )..where((t) => t.remoteId.equals(remoteId))).getSingleOrNull();
   }
 
   /// Upserts an imported todo by remote ID (does not overwrite pending/failed local items).
-  Future<void> upsertImportedTodo(TodosTableCompanion todo, int remoteId) async {
+  Future<void> upsertImportedTodo(
+    TodosTableCompanion todo,
+    int remoteId,
+  ) async {
     final existing = await getTodoByRemoteId(remoteId);
     if (existing != null) {
       // Don't overwrite if local item is pending or failed
@@ -188,8 +196,9 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
         return;
       }
       // Update existing synced item
-      await (update(todosTable)..where((t) => t.remoteId.equals(remoteId)))
-          .write(todo);
+      await (update(
+        todosTable,
+      )..where((t) => t.remoteId.equals(remoteId))).write(todo);
     } else {
       // Insert new imported item
       await into(todosTable).insert(todo);
@@ -225,29 +234,33 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
 
   /// Marks an operation as failed with error and increments retry count.
   Future<void> markOpFailed(String opId, String error) async {
-    final existing = await (select(syncOperationsTable)
-          ..where((o) => o.opId.equals(opId)))
-        .getSingleOrNull();
+    final existing = await (select(
+      syncOperationsTable,
+    )..where((o) => o.opId.equals(opId))).getSingleOrNull();
     if (existing == null) return;
-    await (update(syncOperationsTable)..where((o) => o.opId.equals(opId)))
-        .write(SyncOperationsTableCompanion(
-      status: const Value('queued'),
-      retryCount: Value(existing.retryCount + 1),
-      lastError: Value(error),
-    ));
+    await (update(
+      syncOperationsTable,
+    )..where((o) => o.opId.equals(opId))).write(
+      SyncOperationsTableCompanion(
+        status: const Value('queued'),
+        retryCount: Value(existing.retryCount + 1),
+        lastError: Value(error),
+      ),
+    );
   }
 
   /// Deletes all operations for a specific todo.
   Future<void> deleteOpsForTodo(String todoLocalId) {
-    return (delete(syncOperationsTable)
-          ..where((o) => o.todoLocalId.equals(todoLocalId)))
-        .go();
+    return (delete(
+      syncOperationsTable,
+    )..where((o) => o.todoLocalId.equals(todoLocalId))).go();
   }
 
   /// Deletes a specific operation.
   Future<void> deleteOp(String opId) {
-    return (delete(syncOperationsTable)..where((o) => o.opId.equals(opId)))
-        .go();
+    return (delete(
+      syncOperationsTable,
+    )..where((o) => o.opId.equals(opId))).go();
   }
 
   /// Gets all queued operations for a specific todo.
@@ -284,11 +297,13 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
         final createPayload =
             jsonDecode(existingCreateOp.payloadJson) as Map<String, dynamic>;
         final mergedPayload = {...createPayload, ...payload};
-        await (update(syncOperationsTable)
-              ..where((o) => o.opId.equals(existingCreateOp.opId)))
-            .write(SyncOperationsTableCompanion(
-          payloadJson: Value(jsonEncode(mergedPayload)),
-        ));
+        await (update(
+          syncOperationsTable,
+        )..where((o) => o.opId.equals(existingCreateOp.opId))).write(
+          SyncOperationsTableCompanion(
+            payloadJson: Value(jsonEncode(mergedPayload)),
+          ),
+        );
         return;
       }
       if (type == 'delete') {
@@ -306,11 +321,11 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
     // Rule B: If incoming is UPDATE and there's already a queued UPDATE
     if (type == 'update' && existingUpdateOp != null) {
       // Keep only ONE UPDATE op with latest payload
-      await (update(syncOperationsTable)
-            ..where((o) => o.opId.equals(existingUpdateOp.opId)))
-          .write(SyncOperationsTableCompanion(
-        payloadJson: Value(jsonEncode(payload)),
-      ));
+      await (update(
+        syncOperationsTable,
+      )..where((o) => o.opId.equals(existingUpdateOp.opId))).write(
+        SyncOperationsTableCompanion(payloadJson: Value(jsonEncode(payload))),
+      );
       return;
     }
 
@@ -322,15 +337,17 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
     }
 
     // Insert new operation
-    await into(syncOperationsTable).insert(SyncOperationsTableCompanion(
-      opId: Value(opId),
-      todoLocalId: Value(todoLocalId),
-      type: Value(type),
-      payloadJson: Value(jsonEncode(payload)),
-      createdAt: Value(DateTime.now()),
-      retryCount: const Value(0),
-      status: const Value('queued'),
-    ));
+    await into(syncOperationsTable).insert(
+      SyncOperationsTableCompanion(
+        opId: Value(opId),
+        todoLocalId: Value(todoLocalId),
+        type: Value(type),
+        payloadJson: Value(jsonEncode(payload)),
+        createdAt: Value(DateTime.now()),
+        retryCount: const Value(0),
+        status: const Value('queued'),
+      ),
+    );
   }
 
   /// Counts pending (queued) operations.
