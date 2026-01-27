@@ -5,7 +5,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../../application/todo_filter.dart';
 import '../../application/todos_controller.dart';
 import '../../application/todos_providers.dart';
+import '../../application/todos_sync_controller.dart';
 import '../../domain/todo.dart';
+import '../../sync/todos_sync_engine.dart';
 import '../widgets/todo_list_item.dart';
 
 /// The main page displaying the list of todos.
@@ -16,9 +18,13 @@ class TodosListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final todosAsync = ref.watch(todosStreamProvider);
     final filter = ref.watch(todoFilterProvider);
+    final syncState = ref.watch(todosSyncControllerProvider);
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Todos'),
+        actions: [
+          _buildSyncButton(context, ref, syncState),
+        ],
       ),
       body: todosAsync.when(
         loading: () => const Center(
@@ -57,6 +63,68 @@ class TodosListPage extends ConsumerWidget {
     );
   }
 
+  Widget _buildSyncButton(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<void> syncState,
+  ) {
+    if (syncState.isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16),
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: AppColors.white,
+          ),
+        ),
+      );
+    }
+    return IconButton(
+      icon: const Icon(Icons.sync),
+      tooltip: 'Sync now',
+      onPressed: () => _performSync(context, ref),
+    );
+  }
+
+  Future<void> _performSync(BuildContext context, WidgetRef ref) async {
+    try {
+      final result =
+          await ref.read(todosSyncControllerProvider.notifier).syncNow();
+      if (!context.mounted) return;
+      switch (result) {
+        case SyncSuccess(processedCount: final count):
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(count > 0
+                  ? 'Synced $count item${count > 1 ? 's' : ''}'
+                  : 'Already up to date'),
+              duration: const Duration(seconds: 2),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        case SyncFailure(message: final message):
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Sync failed: $message'),
+              duration: const Duration(seconds: 3),
+              backgroundColor: AppColors.error,
+            ),
+          );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Sync error: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   Widget _buildLoadedContent(
     BuildContext context,
     WidgetRef ref,
@@ -66,10 +134,11 @@ class TodosListPage extends ConsumerWidget {
     final filteredTodos = _filterTodos(todos, filter);
     final activeCount = todos.where((t) => !t.completed).length;
     final completedCount = todos.where((t) => t.completed).length;
+    final pendingCount = todos.where((t) => t.syncState == SyncState.pending).length;
     return Column(
       children: [
         _buildFilterChips(ref, filter),
-        _buildStatsBar(activeCount, completedCount),
+        _buildStatsBar(activeCount, completedCount, pendingCount),
         Expanded(
           child: filteredTodos.isEmpty
               ? _buildEmptyState(filter)
@@ -109,7 +178,7 @@ class TodosListPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatsBar(int activeCount, int completedCount) {
+  Widget _buildStatsBar(int activeCount, int completedCount, int pendingCount) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
@@ -127,6 +196,24 @@ class TodosListPage extends ConsumerWidget {
               fontSize: 14,
             ),
           ),
+          if (pendingCount > 0)
+            Row(
+              children: [
+                const Icon(
+                  Icons.schedule,
+                  size: 14,
+                  color: AppColors.secondary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$pendingCount pending',
+                  style: const TextStyle(
+                    color: AppColors.secondary,
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
           Text(
             '$completedCount completed',
             style: const TextStyle(

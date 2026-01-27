@@ -54,6 +54,7 @@ class TodoListItem extends StatelessWidget {
           ),
         ),
         subtitle: _buildSubtitle(),
+        trailing: _buildSyncStatusIndicator(),
       ),
     );
   }
@@ -67,6 +68,28 @@ class TodoListItem extends StatelessWidget {
         fontSize: 12,
       ),
     );
+  }
+
+  Widget? _buildSyncStatusIndicator() {
+    return switch (todo.syncState) {
+      SyncState.pending => Tooltip(
+          message: 'Pending sync',
+          child: Icon(
+            Icons.schedule,
+            size: 18,
+            color: AppColors.secondary.withValues(alpha: 0.7),
+          ),
+        ),
+      SyncState.failed => Tooltip(
+          message: todo.lastSyncError ?? 'Sync failed',
+          child: const Icon(
+            Icons.warning_amber_rounded,
+            size: 18,
+            color: AppColors.error,
+          ),
+        ),
+      SyncState.synced => null,
+    };
   }
 
   String _formatRelativeDate(DateTime date) {
