@@ -228,7 +228,7 @@ class TodosListPage extends ConsumerWidget {
         Expanded(
           child: filteredTodos.isEmpty
               ? _buildEmptyState(filter)
-              : _buildTodosList(ref, filteredTodos),
+              : _buildTodosList(context, ref, filteredTodos),
         ),
       ],
     );
@@ -341,7 +341,11 @@ class TodosListPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildTodosList(WidgetRef ref, List<Todo> todos) {
+  Widget _buildTodosList(
+    BuildContext context,
+    WidgetRef ref,
+    List<Todo> todos,
+  ) {
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: 80),
       itemCount: todos.length,
@@ -353,6 +357,7 @@ class TodosListPage extends ConsumerWidget {
           onToggle: () => ref
               .read(todosControllerProvider.notifier)
               .toggleCompleted(todo.id),
+          onTap: () => _showEditTodoDialog(context, ref, todo),
           onDismissed: () =>
               ref.read(todosControllerProvider.notifier).deleteTodo(todo.id),
         );
@@ -399,5 +404,68 @@ class TodosListPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _showEditTodoDialog(BuildContext context, WidgetRef ref, Todo todo) {
+    final textController = TextEditingController(text: todo.title);
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Todo'),
+        content: TextField(
+          controller: textController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Enter new title',
+            border: OutlineInputBorder(),
+          ),
+          textCapitalization: TextCapitalization.sentences,
+          onSubmitted: (value) async {
+            if (value.trim().isNotEmpty) {
+              Navigator.of(dialogContext).pop();
+              await _performRename(context, ref, todo, value.trim());
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              final newTitle = textController.text.trim();
+              if (newTitle.isNotEmpty) {
+                Navigator.of(dialogContext).pop();
+                await _performRename(context, ref, todo, newTitle);
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _performRename(
+    BuildContext context,
+    WidgetRef ref,
+    Todo todo,
+    String newTitle,
+  ) async {
+    try {
+      await ref
+          .read(todosControllerProvider.notifier)
+          .renameTodo(todo: todo, newTitle: newTitle);
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to rename: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
   }
 }
