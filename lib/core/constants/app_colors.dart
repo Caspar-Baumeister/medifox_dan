@@ -29,6 +29,9 @@ class AppColors {
   /// Error color
   static const Color error = Color(0xFFE53935);
 
+  /// Warning color
+  static const Color warning = Color(0xFFFFA726);
+
   /// Success color
   static const Color success = Color(0xFF43A047);
 }

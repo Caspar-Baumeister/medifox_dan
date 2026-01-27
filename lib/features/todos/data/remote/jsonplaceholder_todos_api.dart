@@ -1,7 +1,12 @@
 import 'package:dio/dio.dart';
 
+import '../../../../core/errors/app_error.dart';
+import 'api_error_mapper.dart';
+
 /// API client for JSONPlaceholder todos endpoints.
 /// Base URL: https://jsonplaceholder.typicode.com
+///
+/// All methods throw [AppError] on failure for consistent error handling.
 class JsonPlaceholderTodosApi {
   JsonPlaceholderTodosApi(this._dio);
 
@@ -14,67 +19,106 @@ class JsonPlaceholderTodosApi {
   ///
   /// ASSUMPTION: We filter by userId=1 to get a manageable subset of todos
   /// for the initial import (JSONPlaceholder has 200 todos total).
+  ///
+  /// Throws [AppError] on failure.
   Future<List<ApiTodo>> fetchTodos({int? limit, int? userId}) async {
-    final queryParams = <String, dynamic>{};
-    if (userId != null) queryParams['userId'] = userId;
-    if (limit != null) queryParams['_limit'] = limit;
-    final response = await _dio.get<List<dynamic>>(
-      '$_baseUrl/todos',
-      queryParameters: queryParams.isNotEmpty ? queryParams : null,
-    );
-    return (response.data ?? [])
-        .cast<Map<String, dynamic>>()
-        .map(ApiTodo.fromJson)
-        .toList();
+    try {
+      final queryParams = <String, dynamic>{};
+      if (userId != null) queryParams['userId'] = userId;
+      if (limit != null) queryParams['_limit'] = limit;
+
+      final response = await _dio.get<List<dynamic>>(
+        '$_baseUrl/todos',
+        queryParameters: queryParams.isNotEmpty ? queryParams : null,
+      );
+
+      final data = response.data;
+      if (data == null) {
+        throw const ParsingError(message: 'Response data is null');
+      }
+
+      return data.map((item) {
+        if (item is! Map<String, dynamic>) {
+          throw ParsingError(
+            message: 'Invalid item type: ${item.runtimeType}',
+            source: 'fetchTodos',
+          );
+        }
+        return ApiTodo.fromJson(item);
+      }).toList();
+    } catch (e, st) {
+      throw mapToAppError(e, st);
+    }
   }
 
   /// Creates a new todo and returns the remote ID.
+  ///
+  /// Throws [AppError] on failure.
   Future<int> createTodo({
     required String title,
     required bool completed,
     int userId = 1,
   }) async {
-    final response = await _dio.post<Map<String, dynamic>>(
-      '$_baseUrl/todos',
-      data: {'title': title, 'completed': completed, 'userId': userId},
-    );
-    // JSONPlaceholder returns the created todo with an 'id' field
-    final data = response.data;
-    if (data == null || data['id'] == null) {
-      throw ApiException('Failed to create todo: no ID returned');
+    try {
+      final response = await _dio.post<Map<String, dynamic>>(
+        '$_baseUrl/todos',
+        data: {'title': title, 'completed': completed, 'userId': userId},
+      );
+
+      final data = response.data;
+      if (data == null || data['id'] == null) {
+        throw const ParsingError(
+          message: 'Failed to create todo: no ID returned',
+          source: 'createTodo',
+        );
+      }
+
+      final id = data['id'];
+      if (id is! int) {
+        throw ParsingError(
+          message: 'Invalid ID type: ${id.runtimeType}',
+          source: 'createTodo',
+        );
+      }
+
+      return id;
+    } catch (e, st) {
+      throw mapToAppError(e, st);
     }
-    return data['id'] as int;
   }
 
   /// Updates (patches) an existing todo.
+  ///
+  /// Throws [AppError] on failure.
   Future<void> patchTodo({
     required int remoteId,
     String? title,
     bool? completed,
   }) async {
-    final data = <String, dynamic>{};
-    if (title != null) data['title'] = title;
-    if (completed != null) data['completed'] = completed;
-    await _dio.patch<Map<String, dynamic>>(
-      '$_baseUrl/todos/$remoteId',
-      data: data,
-    );
+    try {
+      final data = <String, dynamic>{};
+      if (title != null) data['title'] = title;
+      if (completed != null) data['completed'] = completed;
+
+      await _dio.patch<Map<String, dynamic>>(
+        '$_baseUrl/todos/$remoteId',
+        data: data,
+      );
+    } catch (e, st) {
+      throw mapToAppError(e, st);
+    }
   }
 
   /// Deletes a todo by remote ID.
+  ///
+  /// Throws [AppError] on failure.
   Future<void> deleteTodo({required int remoteId}) async {
-    await _dio.delete<dynamic>('$_baseUrl/todos/$remoteId');
+    try {
+      await _dio.delete<dynamic>('$_baseUrl/todos/$remoteId');
+    } catch (e, st) {
+      throw mapToAppError(e, st);
+    }
   }
-}
-
-/// Exception thrown by the API client.
-class ApiException implements Exception {
-  ApiException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => 'ApiException: $message';
 }
 
 /// Data transfer object for a todo from the API.
@@ -87,12 +131,19 @@ class ApiTodo {
   });
 
   factory ApiTodo.fromJson(Map<String, dynamic> json) {
-    return ApiTodo(
-      id: json['id'] as int,
-      title: json['title'] as String,
-      completed: json['completed'] as bool,
-      userId: json['userId'] as int,
-    );
+    try {
+      return ApiTodo(
+        id: json['id'] as int,
+        title: json['title'] as String,
+        completed: json['completed'] as bool,
+        userId: json['userId'] as int,
+      );
+    } catch (e) {
+      throw ParsingError(
+        message: 'Failed to parse ApiTodo: $e',
+        source: json.toString(),
+      );
+    }
   }
 
   final int id;

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/errors/app_error.dart';
 import '../../application/todo_filter.dart';
 import '../../application/todos_controller.dart';
 import '../../application/todos_providers.dart';
@@ -20,6 +21,32 @@ class TodosListPage extends ConsumerWidget {
     final todosAsync = ref.watch(todosStreamProvider);
     final filter = ref.watch(todoFilterProvider);
     final syncState = ref.watch(todosSyncControllerProvider);
+
+    // Listen for sync errors and show SnackBar
+    ref.listen<AsyncValue<SyncSummary?>>(todosSyncControllerProvider, (
+      previous,
+      next,
+    ) {
+      if (next.hasError && !next.isLoading) {
+        final error = next.error;
+        final message = error is AppError
+            ? error.userMessage
+            : 'An unexpected error occurred';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: AppColors.error,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: AppColors.white,
+              onPressed: () => _performSync(context, ref),
+            ),
+          ),
+        );
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         titleSpacing: 16,
@@ -40,32 +67,36 @@ class TodosListPage extends ConsumerWidget {
           ],
         ),
         actions: [
-          _buildSyncButton(context, ref, syncState),
+          _AnimatedSyncButton(
+            isLoading: syncState.isLoading,
+            onPressed: () => _performSync(context, ref),
+          ),
           _buildOverflowMenu(context, ref, syncState),
         ],
       ),
-      body: todosAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: AppColors.error),
-              const SizedBox(height: 16),
-              Text(
-                error.toString(),
-                style: const TextStyle(color: AppColors.textSecondary),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(todosStreamProvider),
-                child: const Text('Retry'),
-              ),
-            ],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        child: todosAsync.when(
+          loading: () => const Center(
+            key: ValueKey('loading'),
+            child: CircularProgressIndicator(),
+          ),
+          error: (error, stack) => _buildErrorView(
+            key: const ValueKey('error'),
+            context: context,
+            ref: ref,
+            error: error,
+          ),
+          data: (todos) => _buildLoadedContent(
+            key: ValueKey('data_${todos.length}'),
+            context: context,
+            ref: ref,
+            todos: todos,
+            filter: filter,
           ),
         ),
-        data: (todos) => _buildLoadedContent(context, ref, todos, filter),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showAddTodoDialog(context, ref),
@@ -75,35 +106,49 @@ class TodosListPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildSyncButton(
-    BuildContext context,
-    WidgetRef ref,
-    AsyncValue<void> syncState,
-  ) {
-    if (syncState.isLoading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16),
-        child: SizedBox(
-          width: 20,
-          height: 20,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: AppColors.white,
-          ),
+  Widget _buildErrorView({
+    Key? key,
+    required BuildContext context,
+    required WidgetRef ref,
+    required Object error,
+  }) {
+    final message = error is AppError
+        ? error.userMessage
+        : 'Failed to load todos';
+
+    return Center(
+      key: key,
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            FilledButton.icon(
+              onPressed: () => ref.invalidate(todosStreamProvider),
+              icon: const Icon(Icons.refresh),
+              label: const Text('Try Again'),
+            ),
+          ],
         ),
-      );
-    }
-    return IconButton(
-      icon: const Icon(Icons.sync),
-      tooltip: 'Sync now',
-      onPressed: () => _performSync(context, ref),
+      ),
     );
   }
 
   Widget _buildOverflowMenu(
     BuildContext context,
     WidgetRef ref,
-    AsyncValue<void> syncState,
+    AsyncValue<SyncSummary?> syncState,
   ) {
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert),
@@ -119,7 +164,7 @@ class TodosListPage extends ConsumerWidget {
           value: 'import',
           child: Row(
             children: [
-              Icon(Icons.cloud_download, size: 20),
+              Icon(Icons.cloud_download, size: 20, color: AppColors.text),
               SizedBox(width: 12),
               Text('Import from API'),
             ],
@@ -131,104 +176,101 @@ class TodosListPage extends ConsumerWidget {
 
   Future<void> _performSync(BuildContext context, WidgetRef ref) async {
     try {
-      final result = await ref
+      final summary = await ref
           .read(todosSyncControllerProvider.notifier)
           .syncNow();
+
       if (!context.mounted) return;
-      switch (result) {
-        case SyncSuccess(processedCount: final count):
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                count > 0
-                    ? 'Synced $count item${count > 1 ? 's' : ''}'
-                    : 'Already up to date',
-              ),
-              duration: const Duration(seconds: 2),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        case SyncFailure(message: final message):
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Sync failed: $message'),
-              duration: const Duration(seconds: 3),
-              backgroundColor: AppColors.error,
-            ),
-          );
+
+      // Handle aborted sync (offline, etc.)
+      if (summary.aborted) {
+        // Error is handled via the listener
+        return;
       }
-    } catch (e) {
-      if (!context.mounted) return;
+
+      // Show success message
+      final message = summary.succeeded > 0
+          ? 'Synced ${summary.succeeded} item${summary.succeeded > 1 ? 's' : ''}'
+          : 'Already up to date';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Sync error: $e'),
-          duration: const Duration(seconds: 3),
-          backgroundColor: AppColors.error,
+          content: Text(
+            summary.failed > 0
+                ? '$message (${summary.failed} failed)'
+                : message,
+          ),
+          duration: const Duration(seconds: 2),
+          backgroundColor: summary.failed > 0
+              ? AppColors.warning
+              : AppColors.success,
         ),
       );
+    } catch (_) {
+      // Errors are handled via the listener
     }
   }
 
   Future<void> _performImport(BuildContext context, WidgetRef ref) async {
     try {
-      final result = await ref
+      final summary = await ref
           .read(todosSyncControllerProvider.notifier)
           .importFromApi();
+
       if (!context.mounted) return;
-      switch (result) {
-        case SyncSuccess(processedCount: final count):
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                count > 0
-                    ? 'Imported $count todo${count > 1 ? 's' : ''} from API'
-                    : 'No new todos to import',
-              ),
-              duration: const Duration(seconds: 2),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        case SyncFailure(message: final message):
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Import failed: $message'),
-              duration: const Duration(seconds: 3),
-              backgroundColor: AppColors.error,
-            ),
-          );
+
+      // Handle aborted import (offline, etc.)
+      if (summary.aborted) {
+        // Error is handled via the listener
+        return;
       }
-    } catch (e) {
-      if (!context.mounted) return;
+
+      // Show success message
+      final message = summary.succeeded > 0
+          ? 'Imported ${summary.succeeded} todo${summary.succeeded > 1 ? 's' : ''} from API'
+          : 'No new todos to import';
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Import error: $e'),
-          duration: const Duration(seconds: 3),
-          backgroundColor: AppColors.error,
+          content: Text(message),
+          duration: const Duration(seconds: 2),
+          backgroundColor: AppColors.success,
         ),
       );
+    } catch (_) {
+      // Errors are handled via the listener
     }
   }
 
-  Widget _buildLoadedContent(
-    BuildContext context,
-    WidgetRef ref,
-    List<Todo> todos,
-    TodoFilter filter,
-  ) {
+  Widget _buildLoadedContent({
+    Key? key,
+    required BuildContext context,
+    required WidgetRef ref,
+    required List<Todo> todos,
+    required TodoFilter filter,
+  }) {
     final filteredTodos = _filterTodos(todos, filter);
     final activeCount = todos.where((t) => !t.completed).length;
     final completedCount = todos.where((t) => t.completed).length;
     final pendingCount = todos
         .where((t) => t.syncState == SyncState.pending)
         .length;
+    final failedCount = todos
+        .where((t) => t.syncState == SyncState.failed)
+        .length;
+
     return Column(
+      key: key,
       children: [
         _buildFilterChips(ref, filter),
-        _buildStatsBar(activeCount, completedCount, pendingCount),
+        _buildStatsBar(activeCount, completedCount, pendingCount, failedCount),
         Expanded(
-          child: filteredTodos.isEmpty
-              ? _buildEmptyState(filter)
-              : _buildTodosList(context, ref, filteredTodos),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: filteredTodos.isEmpty
+                ? _buildEmptyState(filter)
+                : _buildTodosList(context, ref, filteredTodos),
+          ),
         ),
       ],
     );
@@ -264,7 +306,12 @@ class TodosListPage extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatsBar(int activeCount, int completedCount, int pendingCount) {
+  Widget _buildStatsBar(
+    int activeCount,
+    int completedCount,
+    int pendingCount,
+    int failedCount,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: const BoxDecoration(
@@ -280,9 +327,22 @@ class TodosListPage extends ConsumerWidget {
               fontSize: 14,
             ),
           ),
-          if (pendingCount > 0)
-            Row(
-              children: [
+          Row(
+            children: [
+              if (failedCount > 0) ...[
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  size: 14,
+                  color: AppColors.error,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$failedCount failed',
+                  style: const TextStyle(color: AppColors.error, fontSize: 14),
+                ),
+                const SizedBox(width: 12),
+              ],
+              if (pendingCount > 0) ...[
                 const Icon(
                   Icons.schedule,
                   size: 14,
@@ -297,7 +357,8 @@ class TodosListPage extends ConsumerWidget {
                   ),
                 ),
               ],
-            ),
+            ],
+          ),
           Text(
             '$completedCount completed',
             style: const TextStyle(
@@ -317,6 +378,7 @@ class TodosListPage extends ConsumerWidget {
       TodoFilter.completed => 'No completed todos yet.',
     };
     return Center(
+      key: ValueKey('empty_$filter'),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -347,12 +409,14 @@ class TodosListPage extends ConsumerWidget {
     List<Todo> todos,
   ) {
     return ListView.separated(
+      key: const ValueKey('todos_list'),
       padding: const EdgeInsets.only(bottom: 80),
       itemCount: todos.length,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final todo = todos[index];
         return TodoListItem(
+          key: ValueKey(todo.id),
           todo: todo,
           onToggle: () => ref
               .read(todosControllerProvider.notifier)
@@ -459,13 +523,76 @@ class TodosListPage extends ConsumerWidget {
           .renameTodo(todo: todo, newTitle: newTitle);
     } catch (e) {
       if (!context.mounted) return;
+      final message = e is AppError ? e.userMessage : 'Failed to rename';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to rename: $e'),
+          content: Text(message),
           duration: const Duration(seconds: 3),
           backgroundColor: AppColors.error,
         ),
       );
     }
+  }
+}
+
+/// Animated sync button that rotates while syncing.
+class _AnimatedSyncButton extends StatefulWidget {
+  const _AnimatedSyncButton({required this.isLoading, required this.onPressed});
+
+  final bool isLoading;
+  final VoidCallback onPressed;
+
+  @override
+  State<_AnimatedSyncButton> createState() => _AnimatedSyncButtonState();
+}
+
+class _AnimatedSyncButtonState extends State<_AnimatedSyncButton>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1000),
+      vsync: this,
+    );
+    if (widget.isLoading) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_AnimatedSyncButton oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLoading && !oldWidget.isLoading) {
+      _controller.repeat();
+    } else if (!widget.isLoading && oldWidget.isLoading) {
+      _controller.stop();
+      _controller.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: RotationTransition(
+        turns: _controller,
+        child: Icon(
+          Icons.sync,
+          color: widget.isLoading
+              ? AppColors.white.withValues(alpha: 0.7)
+              : null,
+        ),
+      ),
+      tooltip: 'Sync now',
+      onPressed: widget.isLoading ? null : widget.onPressed,
+    );
   }
 }

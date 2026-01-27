@@ -1,30 +1,47 @@
 import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/errors/app_error.dart';
 import '../data/remote/jsonplaceholder_todos_api.dart';
 
-/// Result of a sync operation.
-sealed class SyncResult {
-  const SyncResult();
-}
+/// Summary of a sync operation.
+class SyncSummary {
+  const SyncSummary({
+    required this.processed,
+    required this.succeeded,
+    required this.failed,
+    required this.aborted,
+    this.abortReason,
+  });
 
-/// Successful sync result.
-final class SyncSuccess extends SyncResult {
-  const SyncSuccess({required this.processedCount});
+  /// Number of operations processed.
+  final int processed;
 
-  final int processedCount;
-}
+  /// Number of operations that succeeded.
+  final int succeeded;
 
-/// Failed sync result.
-final class SyncFailure extends SyncResult {
-  const SyncFailure({required this.message});
+  /// Number of operations that failed.
+  final int failed;
 
-  final String message;
+  /// Whether the sync was aborted early (e.g., offline).
+  final bool aborted;
+
+  /// Reason for abort, if aborted.
+  final AppError? abortReason;
+
+  /// Whether all processed operations succeeded.
+  bool get isFullySuccessful => !aborted && failed == 0;
+
+  /// Whether any operations were processed.
+  bool get hasProcessedAny => processed > 0;
+
+  @override
+  String toString() =>
+      'SyncSummary(processed: $processed, succeeded: $succeeded, failed: $failed, aborted: $aborted)';
 }
 
 /// Engine responsible for processing the sync outbox queue.
@@ -46,16 +63,25 @@ class TodosSyncEngine {
   SyncOpsDao get _syncOpsDao => _database.syncOpsDao;
 
   /// Processes all queued sync operations.
-  /// Returns a [SyncResult] indicating success or failure.
-  Future<SyncResult> syncNow() async {
-    // Check connectivity
+  ///
+  /// Returns a [SyncSummary] with the results.
+  /// Throws [OfflineError] if no network connection.
+  Future<SyncSummary> syncNow() async {
+    // Check connectivity first
     final connectivityResult = await _connectivity.checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
-      return const SyncFailure(message: 'No internet connection');
+      return const SyncSummary(
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        aborted: true,
+        abortReason: OfflineError(),
+      );
     }
 
-    int processedCount = 0;
-    String? lastError;
+    int processed = 0;
+    int succeeded = 0;
+    int failed = 0;
 
     // Process operations FIFO
     while (true) {
@@ -64,28 +90,27 @@ class TodosSyncEngine {
 
       final op = ops.first;
       await _syncOpsDao.markOpInProgress(op.opId);
+      processed++;
 
       try {
         await _processOperation(op);
         await _syncOpsDao.markOpDone(op.opId);
-        processedCount++;
-      } on DioException catch (e) {
-        lastError = _extractErrorMessage(e);
-        await _handleOperationFailure(op, lastError);
-      } on ApiException catch (e) {
-        lastError = e.message;
-        await _handleOperationFailure(op, lastError);
+        succeeded++;
+      } on AppError catch (e) {
+        await _handleOperationFailure(op, e.userMessage);
+        failed++;
       } catch (e) {
-        lastError = e.toString();
-        await _handleOperationFailure(op, lastError);
+        await _handleOperationFailure(op, e.toString());
+        failed++;
       }
     }
 
-    if (lastError != null && processedCount == 0) {
-      return SyncFailure(message: lastError);
-    }
-
-    return SyncSuccess(processedCount: processedCount);
+    return SyncSummary(
+      processed: processed,
+      succeeded: succeeded,
+      failed: failed,
+      aborted: false,
+    );
   }
 
   Future<void> _processOperation(SyncOperationsTableData op) async {
@@ -153,68 +178,81 @@ class TodosSyncEngine {
     await _todosDao.setTodoFailed(op.todoLocalId, error);
   }
 
-  String _extractErrorMessage(DioException e) {
-    if (e.response != null) {
-      return 'HTTP ${e.response?.statusCode}: ${e.message}';
-    }
-    return switch (e.type) {
-      DioExceptionType.connectionTimeout => 'Connection timeout',
-      DioExceptionType.sendTimeout => 'Send timeout',
-      DioExceptionType.receiveTimeout => 'Receive timeout',
-      DioExceptionType.connectionError => 'Connection error',
-      _ => e.message ?? 'Unknown network error',
-    };
-  }
-
   /// Returns the count of pending operations.
   Future<int> pendingOperationsCount() {
     return _syncOpsDao.countPendingOps();
   }
 
   /// Imports todos from the API into the local database.
-  /// 
+  ///
   /// ASSUMPTION: We import todos filtered by userId=1 to get a manageable subset.
   /// JSONPlaceholder has 200 todos total across 10 users (20 per user).
-  /// 
-  /// Returns a [SyncResult] with the number of imported todos.
-  Future<SyncResult> importFromApi({int? limit, int userId = 1}) async {
-    // Check connectivity
+  ///
+  /// Returns a [SyncSummary] with the number of imported todos.
+  /// Throws [OfflineError] if no network connection.
+  Future<SyncSummary> importFromApi({int? limit, int userId = 1}) async {
+    // Check connectivity first
     final connectivityResult = await _connectivity.checkConnectivity();
     if (connectivityResult.contains(ConnectivityResult.none)) {
-      return const SyncFailure(message: 'No internet connection');
+      return const SyncSummary(
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        aborted: true,
+        abortReason: OfflineError(),
+      );
     }
 
     try {
       final apiTodos = await _api.fetchTodos(limit: limit, userId: userId);
-      int importedCount = 0;
+      int imported = 0;
 
       for (final apiTodo in apiTodos) {
-        final localId = const Uuid().v4();
-        final now = DateTime.now();
+        try {
+          final localId = const Uuid().v4();
+          final now = DateTime.now();
 
-        final companion = TodosTableCompanion(
-          localId: Value(localId),
-          title: Value(apiTodo.title),
-          completed: Value(apiTodo.completed),
-          createdAt: Value(now),
-          updatedAt: Value(now),
-          isDeleted: const Value(false),
-          remoteId: Value(apiTodo.id),
-          syncState: const Value('synced'),
-          lastSyncError: const Value(null),
-        );
+          final companion = TodosTableCompanion(
+            localId: Value(localId),
+            title: Value(apiTodo.title),
+            completed: Value(apiTodo.completed),
+            createdAt: Value(now),
+            updatedAt: Value(now),
+            isDeleted: const Value(false),
+            remoteId: Value(apiTodo.id),
+            syncState: const Value('synced'),
+            lastSyncError: const Value(null),
+          );
 
-        await _todosDao.upsertImportedTodo(companion, apiTodo.id);
-        importedCount++;
+          await _todosDao.upsertImportedTodo(companion, apiTodo.id);
+          imported++;
+        } catch (_) {
+          // Skip individual items that fail to import, continue with others
+        }
       }
 
-      return SyncSuccess(processedCount: importedCount);
-    } on DioException catch (e) {
-      return SyncFailure(message: _extractErrorMessage(e));
-    } on ApiException catch (e) {
-      return SyncFailure(message: e.message);
+      return SyncSummary(
+        processed: apiTodos.length,
+        succeeded: imported,
+        failed: apiTodos.length - imported,
+        aborted: false,
+      );
+    } on AppError catch (e) {
+      return SyncSummary(
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        aborted: true,
+        abortReason: e,
+      );
     } catch (e) {
-      return SyncFailure(message: e.toString());
+      return SyncSummary(
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        aborted: true,
+        abortReason: UnknownError(message: e.toString(), originalError: e),
+      );
     }
   }
 }
