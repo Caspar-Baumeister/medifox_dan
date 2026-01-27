@@ -5,6 +5,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../app/theme/theme_mode_controller.dart';
 import '../../../../core/errors/app_error.dart';
 import '../../../../core/ui/toast/toast_service.dart';
+import '../../../../shared/widgets/widgets.dart';
 import '../../application/todo_filter.dart';
 import '../../application/todos_controller.dart';
 import '../../application/todos_providers.dart';
@@ -76,15 +77,13 @@ class TodosListPage extends ConsumerWidget {
         switchInCurve: Curves.easeOut,
         switchOutCurve: Curves.easeIn,
         child: todosAsync.when(
-          loading: () => const Center(
-            key: ValueKey('loading'),
-            child: CircularProgressIndicator(),
-          ),
-          error: (error, stack) => _buildErrorView(
+          loading: () => const LoadingIndicator(key: ValueKey('loading')),
+          error: (error, stack) => ErrorView(
             key: const ValueKey('error'),
-            context: context,
-            ref: ref,
-            error: error,
+            message: error is AppError
+                ? error.userMessage
+                : 'Failed to load todos',
+            onRetry: () => ref.invalidate(todosStreamProvider),
           ),
           data: (todos) => _buildLoadedContent(
             key: ValueKey('data_${todos.length}'),
@@ -99,45 +98,6 @@ class TodosListPage extends ConsumerWidget {
         onPressed: () => _showAddTodoDialog(context, ref),
         tooltip: 'Add Todo',
         child: const Icon(Icons.add),
-      ),
-    );
-  }
-
-  Widget _buildErrorView({
-    Key? key,
-    required BuildContext context,
-    required WidgetRef ref,
-    required Object error,
-  }) {
-    final theme = Theme.of(context);
-    final message = error is AppError
-        ? error.userMessage
-        : 'Failed to load todos';
-
-    return Center(
-      key: key,
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
-            const SizedBox(height: 16),
-            Text(
-              message,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.textTheme.bodySmall?.color,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: () => ref.invalidate(todosStreamProvider),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Try Again'),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -362,34 +322,21 @@ class TodosListPage extends ConsumerWidget {
   }
 
   Widget _buildEmptyState(BuildContext context, TodoFilter filter) {
-    final theme = Theme.of(context);
-    final message = switch (filter) {
-      TodoFilter.all => 'No todos yet.\nTap + to add one!',
-      TodoFilter.active => 'No active todos.\nGreat job!',
-      TodoFilter.completed => 'No completed todos yet.',
-    };
-    return Center(
-      key: ValueKey('empty_$filter'),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            filter == TodoFilter.active
-                ? Icons.check_circle_outline
-                : Icons.inbox_outlined,
-            size: 64,
-            color: theme.colorScheme.outline,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.textTheme.bodySmall?.color,
-            ),
-          ),
-        ],
+    final (message, icon) = switch (filter) {
+      TodoFilter.all => (
+        'No todos yet.\nTap + to add one!',
+        Icons.inbox_outlined,
       ),
+      TodoFilter.active => (
+        'No active todos.\nGreat job!',
+        Icons.check_circle_outline,
+      ),
+      TodoFilter.completed => ('No completed todos yet.', Icons.inbox_outlined),
+    };
+    return EmptyState(
+      key: ValueKey('empty_$filter'),
+      message: message,
+      icon: icon,
     );
   }
 
