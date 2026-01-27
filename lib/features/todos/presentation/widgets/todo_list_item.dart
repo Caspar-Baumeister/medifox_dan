@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/constants/app_colors.dart';
 import '../../domain/todo.dart';
 
 /// A widget that displays a single todo item in the list.
@@ -56,11 +55,17 @@ class _TodoListItemState extends State<TodoListItem>
 
     _scaleAnimation = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 1.3).chain(CurveTween(curve: Curves.easeOut)),
+        tween: Tween(
+          begin: 1.0,
+          end: 1.3,
+        ).chain(CurveTween(curve: Curves.easeOut)),
         weight: 40,
       ),
       TweenSequenceItem(
-        tween: Tween(begin: 1.3, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)),
+        tween: Tween(
+          begin: 1.3,
+          end: 1.0,
+        ).chain(CurveTween(curve: Curves.elasticOut)),
         weight: 60,
       ),
     ]).animate(_successController);
@@ -104,6 +109,8 @@ class _TodoListItemState extends State<TodoListItem>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return TweenAnimationBuilder<double>(
       key: ValueKey('appear_${widget.todo.id}'),
       tween: Tween(begin: 0.0, end: 1.0),
@@ -121,39 +128,44 @@ class _TodoListItemState extends State<TodoListItem>
       child: Dismissible(
         key: Key(widget.todo.id),
         direction: DismissDirection.endToStart,
-        onDismissed: widget.onDismissed != null ? (_) => widget.onDismissed!() : null,
+        onDismissed: widget.onDismissed != null
+            ? (_) => widget.onDismissed!()
+            : null,
         background: Container(
           alignment: Alignment.centerRight,
           padding: const EdgeInsets.only(right: 20),
-          color: AppColors.error,
-          child: const Icon(
-            Icons.delete_outline,
-            color: AppColors.white,
-          ),
+          color: theme.colorScheme.error,
+          child: Icon(Icons.delete_outline, color: theme.colorScheme.onError),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 72),
           child: ListTile(
             onTap: widget.onTap,
-            leading: _buildLeading(),
+            leading: _buildLeading(theme),
             title: AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
               style: TextStyle(
                 fontSize: 16,
-                decoration: widget.todo.completed ? TextDecoration.lineThrough : null,
-                color: widget.todo.completed ? AppColors.textSecondary : AppColors.text,
+                decoration: widget.todo.completed
+                    ? TextDecoration.lineThrough
+                    : null,
+                color: widget.todo.completed
+                    ? theme.textTheme.bodySmall?.color
+                    : theme.textTheme.bodyLarge?.color,
               ),
               child: Text(widget.todo.title),
             ),
-            subtitle: _buildSubtitle(),
-            trailing: _buildSyncStatusIndicator(),
+            subtitle: _buildSubtitle(theme),
+            trailing: _buildSyncStatusIndicator(theme),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildLeading() {
+  Widget _buildLeading(ThemeData theme) {
+    const successColor = Color(0xFF43A047);
+
     return SizedBox(
       width: 48,
       height: 48,
@@ -175,10 +187,7 @@ class _TodoListItemState extends State<TodoListItem>
                       height: 36,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(
-                          color: AppColors.success,
-                          width: 2,
-                        ),
+                        border: Border.all(color: successColor, width: 2),
                       ),
                     ),
                   ),
@@ -186,7 +195,7 @@ class _TodoListItemState extends State<TodoListItem>
               },
             ),
             // Sparkle particles
-            ..._buildSparkles(),
+            ..._buildSparkles(theme),
           ],
           // Checkbox with scale animation
           AnimatedBuilder(
@@ -200,7 +209,6 @@ class _TodoListItemState extends State<TodoListItem>
             child: Checkbox(
               value: widget.todo.completed,
               onChanged: (_) => widget.onToggle(),
-              activeColor: AppColors.success,
             ),
           ),
           // Success checkmark overlay
@@ -214,7 +222,7 @@ class _TodoListItemState extends State<TodoListItem>
                     scale: _scaleAnimation.value,
                     child: const Icon(
                       Icons.check_circle,
-                      color: AppColors.success,
+                      color: successColor,
                       size: 32,
                     ),
                   ),
@@ -226,19 +234,19 @@ class _TodoListItemState extends State<TodoListItem>
     );
   }
 
-  List<Widget> _buildSparkles() {
+  List<Widget> _buildSparkles(ThemeData theme) {
     final random = Random(widget.todo.id.hashCode);
     return List.generate(6, (index) {
       final angle = (index * 60.0) + random.nextDouble() * 30;
       final distance = 16.0 + random.nextDouble() * 8;
-      
+
       return AnimatedBuilder(
         animation: _ringAnimation,
         builder: (context, child) {
           final progress = _ringAnimation.value;
           final radians = angle * (pi / 180);
           final currentDistance = distance * progress;
-          
+
           return Transform.translate(
             offset: Offset(
               cos(radians) * currentDistance,
@@ -252,7 +260,7 @@ class _TodoListItemState extends State<TodoListItem>
                   width: 4,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: _getSparkleColor(index),
+                    color: _getSparkleColor(index, theme),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -264,30 +272,24 @@ class _TodoListItemState extends State<TodoListItem>
     });
   }
 
-  Color _getSparkleColor(int index) {
+  Color _getSparkleColor(int index, ThemeData theme) {
     final colors = [
-      AppColors.success,
-      AppColors.secondary,
-      AppColors.primary,
+      const Color(0xFF43A047), // Success green
+      theme.colorScheme.secondary,
+      theme.colorScheme.primary,
       const Color(0xFFFFD700), // Gold
-      AppColors.success,
+      const Color(0xFF43A047), // Success green
       const Color(0xFF9C27B0), // Purple
     ];
     return colors[index % colors.length];
   }
 
-  Widget? _buildSubtitle() {
+  Widget? _buildSubtitle(ThemeData theme) {
     final formattedDate = _formatRelativeDate(widget.todo.updatedAt);
-    return Text(
-      formattedDate,
-      style: const TextStyle(
-        color: AppColors.textSecondary,
-        fontSize: 12,
-      ),
-    );
+    return Text(formattedDate, style: theme.textTheme.bodySmall);
   }
 
-  Widget? _buildSyncStatusIndicator() {
+  Widget? _buildSyncStatusIndicator(ThemeData theme) {
     // Reserve fixed space for the indicator to prevent layout shifts
     return SizedBox(
       width: 24,
@@ -295,17 +297,17 @@ class _TodoListItemState extends State<TodoListItem>
       child: Center(
         child: switch (widget.todo.syncState) {
           SyncState.pending => _AnimatedSyncIcon(
-              key: ValueKey('pending_${widget.todo.id}'),
-              icon: Icons.schedule,
-              color: AppColors.secondary.withValues(alpha: 0.7),
-              tooltip: 'Pending sync',
-            ),
+            key: ValueKey('pending_${widget.todo.id}'),
+            icon: Icons.schedule,
+            color: theme.colorScheme.secondary.withValues(alpha: 0.7),
+            tooltip: 'Pending sync',
+          ),
           SyncState.failed => _AnimatedSyncIcon(
-              key: ValueKey('failed_${widget.todo.id}'),
-              icon: Icons.warning_amber_rounded,
-              color: AppColors.error,
-              tooltip: widget.todo.lastSyncError ?? 'Sync failed',
-            ),
+            key: ValueKey('failed_${widget.todo.id}'),
+            icon: Icons.warning_amber_rounded,
+            color: theme.colorScheme.error,
+            tooltip: widget.todo.lastSyncError ?? 'Sync failed',
+          ),
           SyncState.synced => null,
         },
       ),
@@ -346,19 +348,12 @@ class _AnimatedSyncIcon extends StatelessWidget {
       builder: (context, value, child) {
         return Transform.scale(
           scale: 0.5 + (0.5 * value),
-          child: Opacity(
-            opacity: value,
-            child: child,
-          ),
+          child: Opacity(opacity: value, child: child),
         );
       },
       child: Tooltip(
         message: tooltip,
-        child: Icon(
-          icon,
-          size: 18,
-          color: color,
-        ),
+        child: Icon(icon, size: 18, color: color),
       ),
     );
   }

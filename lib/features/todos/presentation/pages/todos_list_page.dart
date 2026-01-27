@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../../../../core/constants/app_colors.dart';
+import '../../../../app/theme/theme_mode_controller.dart';
 import '../../../../core/errors/app_error.dart';
 import '../../../../core/ui/toast/toast_service.dart';
 import '../../application/todo_filter.dart';
@@ -22,6 +22,9 @@ class TodosListPage extends ConsumerWidget {
     final todosAsync = ref.watch(todosStreamProvider);
     final filter = ref.watch(todoFilterProvider);
     final syncState = ref.watch(todosSyncControllerProvider);
+    ref.watch(themeModeProvider); // Watch to trigger rebuilds
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
 
     // Listen for sync errors and show toast
     ref.listen<AsyncValue<SyncSummary?>>(todosSyncControllerProvider, (
@@ -47,8 +50,8 @@ class TodosListPage extends ConsumerWidget {
             SvgPicture.asset(
               'assets/white_transparent_logo.svg',
               height: 24,
-              colorFilter: const ColorFilter.mode(
-                Colors.white,
+              colorFilter: ColorFilter.mode(
+                theme.appBarTheme.foregroundColor ?? Colors.white,
                 BlendMode.srcIn,
               ),
             ),
@@ -60,6 +63,10 @@ class TodosListPage extends ConsumerWidget {
           _AnimatedSyncButton(
             isLoading: syncState.isLoading,
             onPressed: () => _performSync(context, ref),
+          ),
+          _ThemeToggleButton(
+            isDark: isDark,
+            onToggle: () => ref.read(themeModeProvider.notifier).toggle(),
           ),
           _buildOverflowMenu(context, ref, syncState),
         ],
@@ -102,6 +109,7 @@ class TodosListPage extends ConsumerWidget {
     required WidgetRef ref,
     required Object error,
   }) {
+    final theme = Theme.of(context);
     final message = error is AppError
         ? error.userMessage
         : 'Failed to load todos';
@@ -113,13 +121,12 @@ class TodosListPage extends ConsumerWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 48, color: AppColors.error),
+            Icon(Icons.error_outline, size: 48, color: theme.colorScheme.error),
             const SizedBox(height: 16),
             Text(
               message,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 16,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.textTheme.bodySmall?.color,
               ),
               textAlign: TextAlign.center,
             ),
@@ -140,6 +147,7 @@ class TodosListPage extends ConsumerWidget {
     WidgetRef ref,
     AsyncValue<SyncSummary?> syncState,
   ) {
+    final theme = Theme.of(context);
     return PopupMenuButton<String>(
       icon: const Icon(Icons.more_vert),
       enabled: !syncState.isLoading,
@@ -150,13 +158,17 @@ class TodosListPage extends ConsumerWidget {
         }
       },
       itemBuilder: (context) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'import',
           child: Row(
             children: [
-              Icon(Icons.cloud_download, size: 20, color: AppColors.text),
-              SizedBox(width: 12),
-              Text('Import from API'),
+              Icon(
+                Icons.cloud_download,
+                size: 20,
+                color: theme.colorScheme.onSurface,
+              ),
+              const SizedBox(width: 12),
+              const Text('Import from API'),
             ],
           ),
         ),
@@ -238,13 +250,19 @@ class TodosListPage extends ConsumerWidget {
     return Column(
       key: key,
       children: [
-        _buildFilterChips(ref, filter),
-        _buildStatsBar(activeCount, completedCount, pendingCount, failedCount),
+        _buildFilterChips(context, ref, filter),
+        _buildStatsBar(
+          context,
+          activeCount,
+          completedCount,
+          pendingCount,
+          failedCount,
+        ),
         Expanded(
           child: AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: filteredTodos.isEmpty
-                ? _buildEmptyState(filter)
+                ? _buildEmptyState(context, filter)
                 : _buildTodosList(context, ref, filteredTodos),
           ),
         ),
@@ -260,7 +278,12 @@ class TodosListPage extends ConsumerWidget {
     };
   }
 
-  Widget _buildFilterChips(WidgetRef ref, TodoFilter selectedFilter) {
+  Widget _buildFilterChips(
+    BuildContext context,
+    WidgetRef ref,
+    TodoFilter selectedFilter,
+  ) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
@@ -273,8 +296,8 @@ class TodosListPage extends ConsumerWidget {
               selected: isSelected,
               onSelected: (_) =>
                   ref.read(todoFilterProvider.notifier).state = filter,
-              selectedColor: AppColors.primary.withValues(alpha: 0.2),
-              checkmarkColor: AppColors.primary,
+              selectedColor: theme.colorScheme.primary.withValues(alpha: 0.2),
+              checkmarkColor: theme.colorScheme.primary,
             ),
           );
         }).toList(),
@@ -283,71 +306,63 @@ class TodosListPage extends ConsumerWidget {
   }
 
   Widget _buildStatsBar(
+    BuildContext context,
     int activeCount,
     int completedCount,
     int pendingCount,
     int failedCount,
   ) {
+    final theme = Theme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: AppColors.divider)),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: theme.colorScheme.outline)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            '$activeCount remaining',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
+          Text('$activeCount remaining', style: theme.textTheme.bodySmall),
           Row(
             children: [
               if (failedCount > 0) ...[
-                const Icon(
+                Icon(
                   Icons.warning_amber_rounded,
                   size: 14,
-                  color: AppColors.error,
+                  color: theme.colorScheme.error,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '$failedCount failed',
-                  style: const TextStyle(color: AppColors.error, fontSize: 14),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
                 ),
                 const SizedBox(width: 12),
               ],
               if (pendingCount > 0) ...[
-                const Icon(
+                Icon(
                   Icons.schedule,
                   size: 14,
-                  color: AppColors.secondary,
+                  color: theme.colorScheme.secondary,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '$pendingCount pending',
-                  style: const TextStyle(
-                    color: AppColors.secondary,
-                    fontSize: 14,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.secondary,
                   ),
                 ),
               ],
             ],
           ),
-          Text(
-            '$completedCount completed',
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 14,
-            ),
-          ),
+          Text('$completedCount completed', style: theme.textTheme.bodySmall),
         ],
       ),
     );
   }
 
-  Widget _buildEmptyState(TodoFilter filter) {
+  Widget _buildEmptyState(BuildContext context, TodoFilter filter) {
+    final theme = Theme.of(context);
     final message = switch (filter) {
       TodoFilter.all => 'No todos yet.\nTap + to add one!',
       TodoFilter.active => 'No active todos.\nGreat job!',
@@ -363,15 +378,14 @@ class TodosListPage extends ConsumerWidget {
                 ? Icons.check_circle_outline
                 : Icons.inbox_outlined,
             size: 64,
-            color: AppColors.divider,
+            color: theme.colorScheme.outline,
           ),
           const SizedBox(height: 16),
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 16,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.textTheme.bodySmall?.color,
             ),
           ),
         ],
@@ -414,10 +428,7 @@ class TodosListPage extends ConsumerWidget {
         content: TextField(
           controller: textController,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'What needs to be done?',
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(hintText: 'What needs to be done?'),
           textCapitalization: TextCapitalization.sentences,
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) {
@@ -455,10 +466,7 @@ class TodosListPage extends ConsumerWidget {
         content: TextField(
           controller: textController,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Enter new title',
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(hintText: 'Enter new title'),
           textCapitalization: TextCapitalization.sentences,
           onSubmitted: (value) async {
             if (value.trim().isNotEmpty) {
@@ -551,18 +559,48 @@ class _AnimatedSyncButtonState extends State<_AnimatedSyncButton>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return IconButton(
       icon: RotationTransition(
         turns: _controller,
         child: Icon(
           Icons.sync,
           color: widget.isLoading
-              ? AppColors.white.withValues(alpha: 0.7)
+              ? theme.appBarTheme.foregroundColor?.withValues(alpha: 0.5)
               : null,
         ),
       ),
       tooltip: 'Sync now',
       onPressed: widget.isLoading ? null : widget.onPressed,
+    );
+  }
+}
+
+/// Theme toggle button with animated icon transition.
+class _ThemeToggleButton extends StatelessWidget {
+  const _ThemeToggleButton({required this.isDark, required this.onToggle});
+
+  final bool isDark;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 300),
+        transitionBuilder: (child, animation) {
+          return RotationTransition(
+            turns: Tween(begin: 0.5, end: 1.0).animate(animation),
+            child: FadeTransition(opacity: animation, child: child),
+          );
+        },
+        child: Icon(
+          isDark ? Icons.light_mode : Icons.dark_mode,
+          key: ValueKey(isDark),
+        ),
+      ),
+      tooltip: isDark ? 'Switch to light mode' : 'Switch to dark mode',
+      onPressed: onToggle,
     );
   }
 }
