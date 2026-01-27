@@ -24,6 +24,7 @@ class TodosListPage extends ConsumerWidget {
         title: const Text('My Todos'),
         actions: [
           _buildSyncButton(context, ref, syncState),
+          _buildOverflowMenu(context, ref, syncState),
         ],
       ),
       body: todosAsync.when(
@@ -88,6 +89,35 @@ class TodosListPage extends ConsumerWidget {
     );
   }
 
+  Widget _buildOverflowMenu(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<void> syncState,
+  ) {
+    return PopupMenuButton<String>(
+      icon: const Icon(Icons.more_vert),
+      enabled: !syncState.isLoading,
+      onSelected: (value) {
+        switch (value) {
+          case 'import':
+            _performImport(context, ref);
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'import',
+          child: Row(
+            children: [
+              Icon(Icons.cloud_download, size: 20),
+              SizedBox(width: 12),
+              Text('Import from API'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _performSync(BuildContext context, WidgetRef ref) async {
     try {
       final result =
@@ -118,6 +148,43 @@ class TodosListPage extends ConsumerWidget {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Sync error: $e'),
+          duration: const Duration(seconds: 3),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _performImport(BuildContext context, WidgetRef ref) async {
+    try {
+      final result =
+          await ref.read(todosSyncControllerProvider.notifier).importFromApi();
+      if (!context.mounted) return;
+      switch (result) {
+        case SyncSuccess(processedCount: final count):
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(count > 0
+                  ? 'Imported $count todo${count > 1 ? 's' : ''} from API'
+                  : 'No new todos to import'),
+              duration: const Duration(seconds: 2),
+              backgroundColor: AppColors.success,
+            ),
+          );
+        case SyncFailure(message: final message):
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Import failed: $message'),
+              duration: const Duration(seconds: 3),
+              backgroundColor: AppColors.error,
+            ),
+          );
+      }
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Import error: $e'),
           duration: const Duration(seconds: 3),
           backgroundColor: AppColors.error,
         ),

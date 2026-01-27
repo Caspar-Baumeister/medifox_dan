@@ -172,6 +172,29 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
     final result = await query.getSingle();
     return result.read(count) ?? 0;
   }
+
+  /// Gets a todo by its remote ID.
+  Future<TodosTableData?> getTodoByRemoteId(int remoteId) {
+    return (select(todosTable)..where((t) => t.remoteId.equals(remoteId)))
+        .getSingleOrNull();
+  }
+
+  /// Upserts an imported todo by remote ID (does not overwrite pending/failed local items).
+  Future<void> upsertImportedTodo(TodosTableCompanion todo, int remoteId) async {
+    final existing = await getTodoByRemoteId(remoteId);
+    if (existing != null) {
+      // Don't overwrite if local item is pending or failed
+      if (existing.syncState == 'pending' || existing.syncState == 'failed') {
+        return;
+      }
+      // Update existing synced item
+      await (update(todosTable)..where((t) => t.remoteId.equals(remoteId)))
+          .write(todo);
+    } else {
+      // Insert new imported item
+      await into(todosTable).insert(todo);
+    }
+  }
 }
 
 /// Data access object for sync operations.

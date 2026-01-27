@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
+import 'package:drift/drift.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/database/app_database.dart';
 import '../data/remote/jsonplaceholder_todos_api.dart';
@@ -167,5 +169,52 @@ class TodosSyncEngine {
   /// Returns the count of pending operations.
   Future<int> pendingOperationsCount() {
     return _syncOpsDao.countPendingOps();
+  }
+
+  /// Imports todos from the API into the local database.
+  /// 
+  /// ASSUMPTION: We import todos filtered by userId=1 to get a manageable subset.
+  /// JSONPlaceholder has 200 todos total across 10 users (20 per user).
+  /// 
+  /// Returns a [SyncResult] with the number of imported todos.
+  Future<SyncResult> importFromApi({int? limit, int userId = 1}) async {
+    // Check connectivity
+    final connectivityResult = await _connectivity.checkConnectivity();
+    if (connectivityResult.contains(ConnectivityResult.none)) {
+      return const SyncFailure(message: 'No internet connection');
+    }
+
+    try {
+      final apiTodos = await _api.fetchTodos(limit: limit, userId: userId);
+      int importedCount = 0;
+
+      for (final apiTodo in apiTodos) {
+        final localId = const Uuid().v4();
+        final now = DateTime.now();
+
+        final companion = TodosTableCompanion(
+          localId: Value(localId),
+          title: Value(apiTodo.title),
+          completed: Value(apiTodo.completed),
+          createdAt: Value(now),
+          updatedAt: Value(now),
+          isDeleted: const Value(false),
+          remoteId: Value(apiTodo.id),
+          syncState: const Value('synced'),
+          lastSyncError: const Value(null),
+        );
+
+        await _todosDao.upsertImportedTodo(companion, apiTodo.id);
+        importedCount++;
+      }
+
+      return SyncSuccess(processedCount: importedCount);
+    } on DioException catch (e) {
+      return SyncFailure(message: _extractErrorMessage(e));
+    } on ApiException catch (e) {
+      return SyncFailure(message: e.message);
+    } catch (e) {
+      return SyncFailure(message: e.toString());
+    }
   }
 }
