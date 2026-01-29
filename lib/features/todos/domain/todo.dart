@@ -77,7 +77,7 @@ class Todo {
   final bool isDeleted;
 
   /// Creates a copy of this todo with the given fields replaced.
-  /// Automatically updates updatedAt when relevant fields change.
+  /// Automatically updates updatedAt when relevant fields actually change.
   Todo copyWith({
     String? id,
     String? title,
@@ -91,7 +91,11 @@ class Todo {
     bool clearRemoteId = false,
     bool clearLastSyncError = false,
   }) {
-    final hasRelevantChanges = title != null || completed != null;
+    // Only consider it a "relevant change" if the value is different from current
+    final titleChanged = title != null && title != this.title;
+    final completedChanged = completed != null && completed != this.completed;
+    final hasRelevantChanges = titleChanged || completedChanged;
+
     return Todo(
       id: id ?? this.id,
       title: title ?? this.title,
@@ -101,9 +105,8 @@ class Todo {
           updatedAt ?? (hasRelevantChanges ? DateTime.now() : this.updatedAt),
       remoteId: clearRemoteId ? null : (remoteId ?? this.remoteId),
       syncState: syncState ?? this.syncState,
-      lastSyncError: clearLastSyncError
-          ? null
-          : (lastSyncError ?? this.lastSyncError),
+      lastSyncError:
+          clearLastSyncError ? null : (lastSyncError ?? this.lastSyncError),
       isDeleted: isDeleted ?? this.isDeleted,
     );
   }

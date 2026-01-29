@@ -80,10 +80,9 @@ class TodosListPage extends ConsumerWidget {
             onFilterChanged: (f) =>
                 ref.read(todoFilterProvider.notifier).state = f,
             onToggle: (id) =>
-                ref.read(todosControllerProvider.notifier).toggleCompleted(id),
+                ref.read(todosControllerProvider).toggleCompleted(id),
             onEdit: (todo) => _showEditTodoDialog(context, ref, todo),
-            onDelete: (id) =>
-                ref.read(todosControllerProvider.notifier).deleteTodo(id),
+            onDelete: (id) => ref.read(todosControllerProvider).deleteTodo(id),
           ),
         ),
       ),
@@ -117,7 +116,7 @@ class TodosListPage extends ConsumerWidget {
         fabRect: fabRect,
         builder: (context) => AddTodoDialogContent(
           onAdd: (title) {
-            ref.read(todosControllerProvider.notifier).addTodo(title);
+            ref.read(todosControllerProvider).addTodo(title);
             Navigator.of(context).pop();
           },
           onCancel: () => Navigator.of(context).pop(),
@@ -214,7 +213,7 @@ class TodosListPage extends ConsumerWidget {
   ) async {
     try {
       await ref
-          .read(todosControllerProvider.notifier)
+          .read(todosControllerProvider)
           .renameTodo(todo: todo, newTitle: newTitle);
     } catch (e) {
       if (!context.mounted) return;

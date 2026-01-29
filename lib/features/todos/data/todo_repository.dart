@@ -6,6 +6,9 @@ abstract class TodoRepository {
   /// Watches all non-deleted todos as a stream.
   Stream<List<Todo>> watchTodos();
 
+  /// Gets a single todo by ID.
+  Future<Todo?> getById(String id);
+
   /// Creates a new todo.
   Future<void> create(Todo todo);
 

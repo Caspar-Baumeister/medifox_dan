@@ -25,111 +25,115 @@ class DriftTodoRepository implements TodoRepository {
 
   @override
   Future<void> create(Todo todo) async {
-    // Insert todo with pending sync state
-    final companion = TodosTableCompanion(
-      localId: Value(todo.id),
-      title: Value(todo.title),
-      completed: Value(todo.completed),
-      createdAt: Value(todo.createdAt),
-      updatedAt: Value(todo.updatedAt),
-      isDeleted: const Value(false),
-      remoteId: const Value(null),
-      syncState: const Value('pending'),
-      lastSyncError: const Value(null),
-    );
-    await _todosDao.insertTodo(companion);
+    await _database.transaction(() async {
+      // Insert todo with pending sync state
+      final companion = TodosTableCompanion(
+        localId: Value(todo.id),
+        title: Value(todo.title),
+        completed: Value(todo.completed),
+        createdAt: Value(todo.createdAt),
+        updatedAt: Value(todo.updatedAt),
+        isDeleted: const Value(false),
+        remoteId: const Value(null),
+        syncState: const Value('pending'),
+        lastSyncError: const Value(null),
+      );
+      await _todosDao.insertTodo(companion);
 
-    // Enqueue CREATE sync operation
-    await _syncOpsDao.enqueueOrCoalesce(
-      opId: _uuid.v4(),
-      todoLocalId: todo.id,
-      type: 'create',
-      payload: {'title': todo.title, 'completed': todo.completed, 'userId': 1},
-    );
+      // Enqueue CREATE sync operation
+      await _syncOpsDao.enqueueOrCoalesce(
+        opId: _uuid.v4(),
+        todoLocalId: todo.id,
+        type: 'create',
+        payload: {
+          'title': todo.title,
+          'completed': todo.completed,
+          'userId': 1,
+        },
+      );
+    });
   }
 
   @override
   Future<void> update(Todo todo) async {
-    // Update todo with pending sync state
-    final companion = TodosTableCompanion(
-      localId: Value(todo.id),
-      title: Value(todo.title),
-      completed: Value(todo.completed),
-      createdAt: Value(todo.createdAt),
-      updatedAt: Value(DateTime.now()),
-      isDeleted: const Value(false),
-      syncState: const Value('pending'),
-      lastSyncError: const Value(null),
-    );
-    await _todosDao.updateTodo(companion);
+    await _database.transaction(() async {
+      // Update todo with pending sync state
+      final companion = TodosTableCompanion(
+        localId: Value(todo.id),
+        title: Value(todo.title),
+        completed: Value(todo.completed),
+        createdAt: Value(todo.createdAt),
+        updatedAt: Value(DateTime.now()),
+        isDeleted: const Value(false),
+        syncState: const Value('pending'),
+        lastSyncError: const Value(null),
+      );
+      await _todosDao.updateTodo(companion);
 
-    // Enqueue UPDATE sync operation
-    await _syncOpsDao.enqueueOrCoalesce(
-      opId: _uuid.v4(),
-      todoLocalId: todo.id,
-      type: 'update',
-      payload: {'title': todo.title, 'completed': todo.completed},
-    );
+      // Enqueue UPDATE sync operation
+      await _syncOpsDao.enqueueOrCoalesce(
+        opId: _uuid.v4(),
+        todoLocalId: todo.id,
+        type: 'update',
+        payload: {'title': todo.title, 'completed': todo.completed},
+      );
+    });
   }
 
   @override
   Future<void> toggleCompleted(String id) async {
-    final existing = await _todosDao.getTodoById(id);
-    if (existing == null) return;
+    await _database.transaction(() async {
+      final existing = await _todosDao.getTodoById(id);
+      if (existing == null) return;
 
-    final newCompleted = !existing.completed;
+      final newCompleted = !existing.completed;
 
-    // Update todo with pending sync state
-    await _todosDao.updateTodo(
-      TodosTableCompanion(
-        localId: Value(id),
-        completed: Value(newCompleted),
-        updatedAt: Value(DateTime.now()),
-        syncState: const Value('pending'),
-        lastSyncError: const Value(null),
-      ),
-    );
+      // Update todo with pending sync state
+      await _todosDao.updateTodo(
+        TodosTableCompanion(
+          localId: Value(id),
+          completed: Value(newCompleted),
+          updatedAt: Value(DateTime.now()),
+          syncState: const Value('pending'),
+          lastSyncError: const Value(null),
+        ),
+      );
 
-    // Enqueue UPDATE sync operation
-    await _syncOpsDao.enqueueOrCoalesce(
-      opId: _uuid.v4(),
-      todoLocalId: id,
-      type: 'update',
-      payload: {'title': existing.title, 'completed': newCompleted},
-    );
+      // Enqueue UPDATE sync operation
+      await _syncOpsDao.enqueueOrCoalesce(
+        opId: _uuid.v4(),
+        todoLocalId: id,
+        type: 'update',
+        payload: {'title': existing.title, 'completed': newCompleted},
+      );
+    });
   }
 
   @override
   Future<void> delete(String id) async {
-    final existing = await _todosDao.getTodoById(id);
-    if (existing == null) return;
+    await _database.transaction(() async {
+      final existing = await _todosDao.getTodoById(id);
+      if (existing == null) return;
 
-    // Check if there's a pending CREATE - if so, just remove without DELETE op
-    final pendingOps = await _syncOpsDao.getOpsForTodo(id);
-    final hasPendingCreate = pendingOps.any(
-      (op) => op.type == 'create' && op.status == 'queued',
-    );
+      // Soft delete todo
+      await _todosDao.softDeleteTodo(id);
 
-    // Soft delete todo
-    await _todosDao.softDeleteTodo(id);
-
-    if (hasPendingCreate) {
-      // Item never existed on server, just clean up local ops
+      // Enqueue DELETE sync operation.
+      // Note: enqueueOrCoalesce handles the case where a pending CREATE exists
+      // by removing the CREATE op instead of inserting a DELETE.
       await _syncOpsDao.enqueueOrCoalesce(
         opId: _uuid.v4(),
         todoLocalId: id,
         type: 'delete',
         payload: {},
       );
-    } else {
-      // Enqueue DELETE sync operation
-      await _syncOpsDao.enqueueOrCoalesce(
-        opId: _uuid.v4(),
-        todoLocalId: id,
-        type: 'delete',
-        payload: {},
-      );
-    }
+    });
+  }
+
+  @override
+  Future<Todo?> getById(String id) async {
+    final row = await _todosDao.getTodoById(id);
+    return row != null ? _mapRowToTodo(row) : null;
   }
 
   @override

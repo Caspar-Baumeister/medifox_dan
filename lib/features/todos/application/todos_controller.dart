@@ -1,47 +1,43 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/errors/app_error.dart';
 import '../data/todo_repository.dart';
 import '../domain/todo.dart';
 import 'todos_providers.dart';
 
-/// Exception thrown when todo validation fails.
-class TodoValidationException implements Exception {
-  const TodoValidationException(this.message);
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
 /// Controller for managing todo write operations.
-/// Does not store state; delegates to repository.
-class TodosController extends Notifier<void> {
-  @override
-  void build() {
-    // No state to initialize
-  }
+/// Uses Riverpod for dependency access but holds no state itself.
+class TodosController {
+  TodosController(this._repository);
 
-  TodoRepository get _repository => ref.read(todoRepositoryProvider);
+  final TodoRepository _repository;
 
   /// Adds a new todo with the given title.
+  /// Throws [ValidationError] if the title is empty.
   Future<void> addTodo(String title) async {
     final trimmedTitle = title.trim();
     if (trimmedTitle.isEmpty) {
-      throw const TodoValidationException('Title cannot be empty');
+      throw const ValidationError(
+        message: 'Title cannot be empty',
+        field: 'title',
+      );
     }
     final todo = Todo.create(title: trimmedTitle);
     await _repository.create(todo);
   }
 
   /// Renames an existing todo.
-  /// Throws [TodoValidationException] if the new title is empty.
+  /// Throws [ValidationError] if the new title is empty.
   Future<void> renameTodo({
     required Todo todo,
     required String newTitle,
   }) async {
     final trimmedTitle = newTitle.trim();
     if (trimmedTitle.isEmpty) {
-      throw const TodoValidationException('Title cannot be empty');
+      throw const ValidationError(
+        message: 'Title cannot be empty',
+        field: 'title',
+      );
     }
     // No-op if title unchanged
     if (trimmedTitle == todo.title) return;
@@ -62,6 +58,6 @@ class TodosController extends Notifier<void> {
 }
 
 /// Provider for the TodosController.
-final todosControllerProvider = NotifierProvider<TodosController, void>(
-  TodosController.new,
-);
+final todosControllerProvider = Provider<TodosController>((ref) {
+  return TodosController(ref.watch(todoRepositoryProvider));
+});

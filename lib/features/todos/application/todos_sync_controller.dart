@@ -98,9 +98,3 @@ final todosSyncControllerProvider =
     AsyncNotifierProvider<TodosSyncController, SyncSummary?>(
       TodosSyncController.new,
     );
-
-/// Provider for the count of pending sync operations.
-final pendingSyncCountProvider = FutureProvider<int>((ref) async {
-  final syncEngine = ref.watch(todosSyncEngineProvider);
-  return syncEngine.pendingOperationsCount();
-});

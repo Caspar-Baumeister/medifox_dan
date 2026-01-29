@@ -112,6 +112,21 @@ class DatabaseError extends AppError {
       'DatabaseError: ${operation ?? 'Operation'} failed - $message';
 }
 
+/// Error for validation failures (e.g., empty title).
+class ValidationError extends AppError {
+  const ValidationError({required this.message, this.field});
+
+  final String message;
+  final String? field;
+
+  @override
+  String get userMessage => message;
+
+  @override
+  String get debugMessage =>
+      'ValidationError: $message${field != null ? ' (field: $field)' : ''}';
+}
+
 /// Fallback error for unexpected cases.
 class UnknownError extends AppError {
   const UnknownError({required this.message, this.originalError});
