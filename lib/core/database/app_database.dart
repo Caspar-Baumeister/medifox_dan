@@ -6,10 +6,8 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
-import 'tables/tables.dart';
-
-// Re-export tables for external use
-export 'tables/tables.dart';
+import 'tables/sync_operations_table.dart';
+import 'tables/todos_table.dart';
 
 part 'app_database.g.dart';
 

@@ -17,10 +17,7 @@ class TodosController {
   Future<void> addTodo(String title) async {
     final trimmedTitle = title.trim();
     if (trimmedTitle.isEmpty) {
-      throw const ValidationError(
-        message: 'Title cannot be empty',
-        field: 'title',
-      );
+      throw const ValidationError(message: 'Title cannot be empty');
     }
     final todo = Todo.create(title: trimmedTitle);
     await _repository.create(todo);
@@ -34,10 +31,7 @@ class TodosController {
   }) async {
     final trimmedTitle = newTitle.trim();
     if (trimmedTitle.isEmpty) {
-      throw const ValidationError(
-        message: 'Title cannot be empty',
-        field: 'title',
-      );
+      throw const ValidationError(message: 'Title cannot be empty');
     }
     // No-op if title unchanged
     if (trimmedTitle == todo.title) return;

@@ -10,8 +10,6 @@ import '../../../core/errors/app_error.dart';
 import '../data/remote/jsonplaceholder_todos_api.dart';
 import '../domain/sync_summary.dart';
 
-export '../domain/sync_summary.dart';
-
 /// Engine responsible for processing the sync outbox queue.
 /// Handles CREATE, UPDATE, DELETE operations against JSONPlaceholder.
 class TodosSyncEngine {
@@ -33,17 +31,19 @@ class TodosSyncEngine {
   /// Processes all queued sync operations.
   ///
   /// Returns a [SyncSummary] with the results.
-  /// Throws [OfflineError] if no network connection.
   Future<SyncSummary> syncNow() async {
-    // Check connectivity first
+    // Check connectivity first - only abort if there's truly no connection
     final connectivityResult = await _connectivity.checkConnectivity();
-    if (connectivityResult.contains(ConnectivityResult.none)) {
+    final hasConnection = connectivityResult.any(
+      (r) => r != ConnectivityResult.none,
+    );
+    if (!hasConnection) {
       return const SyncSummary(
         processed: 0,
         succeeded: 0,
         failed: 0,
         aborted: true,
-        abortReason: OfflineError(),
+        abortReason: NetworkError.offline(),
       );
     }
 
@@ -65,7 +65,7 @@ class TodosSyncEngine {
         await _syncOpsDao.markOpDone(op.opId);
         succeeded++;
       } on AppError catch (e) {
-        await _handleOperationFailure(op, e.userMessage);
+        await _handleOperationFailure(op, e.message);
         failed++;
       } catch (e) {
         await _handleOperationFailure(op, e.toString());
@@ -157,17 +157,19 @@ class TodosSyncEngine {
   /// JSONPlaceholder has 200 todos total across 10 users (20 per user).
   ///
   /// Returns a [SyncSummary] with the number of imported todos.
-  /// Throws [OfflineError] if no network connection.
   Future<SyncSummary> importFromApi({int? limit, int userId = 1}) async {
-    // Check connectivity first
+    // Check connectivity first - only abort if there's truly no connection
     final connectivityResult = await _connectivity.checkConnectivity();
-    if (connectivityResult.contains(ConnectivityResult.none)) {
+    final hasConnection = connectivityResult.any(
+      (r) => r != ConnectivityResult.none,
+    );
+    if (!hasConnection) {
       return const SyncSummary(
         processed: 0,
         succeeded: 0,
         failed: 0,
         aborted: true,
-        abortReason: OfflineError(),
+        abortReason: NetworkError.offline(),
       );
     }
 
@@ -225,7 +227,7 @@ class TodosSyncEngine {
         succeeded: 0,
         failed: 0,
         aborted: true,
-        abortReason: UnknownError(message: e.toString(), originalError: e),
+        abortReason: AppException(message: e.toString(), cause: e),
       );
     }
   }

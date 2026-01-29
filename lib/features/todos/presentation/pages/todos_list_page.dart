@@ -4,14 +4,22 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../core/errors/app_error.dart';
 import '../../../../core/theme/theme_mode_controller.dart';
-import '../../../../core/widgets/widgets.dart';
+import '../../../../core/widgets/empty_state.dart';
+import '../../../../core/widgets/error_view.dart';
+import '../../../../core/widgets/loading_indicator.dart';
+import '../../../../core/widgets/theme_toggle_button.dart';
+import '../../../../core/widgets/toast_service.dart';
 import '../../application/todo_filter.dart';
 import '../../application/todos_controller.dart';
 import '../../application/todos_providers.dart';
 import '../../application/todos_sync_controller.dart';
+import '../../domain/sync_summary.dart';
 import '../../domain/todo.dart';
-import '../../sync/todos_sync_engine.dart';
-import '../widgets/widgets.dart';
+import '../widgets/add_todo_dialog.dart';
+import '../widgets/animated_sync_button.dart';
+import '../widgets/expanding_dialog_route.dart';
+import '../widgets/expanding_fab.dart';
+import '../widgets/todo_list_item.dart';
 
 /// The main page displaying the list of todos.
 class TodosListPage extends ConsumerWidget {
@@ -34,7 +42,7 @@ class TodosListPage extends ConsumerWidget {
       if (next.hasError && !next.isLoading) {
         final error = next.error;
         final message = error is AppError
-            ? error.userMessage
+            ? error.message
             : 'An unexpected error occurred';
         ToastService.error(context, message);
       }
@@ -68,9 +76,7 @@ class TodosListPage extends ConsumerWidget {
           loading: () => const LoadingIndicator(key: ValueKey('loading')),
           error: (error, stack) => ErrorView(
             key: const ValueKey('error'),
-            message: error is AppError
-                ? error.userMessage
-                : 'Failed to load todos',
+            message: error is AppError ? error.message : 'Failed to load todos',
             onRetry: () => ref.invalidate(todosStreamProvider),
           ),
           data: (todos) => _TodosContent(
@@ -217,7 +223,7 @@ class TodosListPage extends ConsumerWidget {
           .renameTodo(todo: todo, newTitle: newTitle);
     } catch (e) {
       if (!context.mounted) return;
-      final message = e is AppError ? e.userMessage : 'Failed to rename';
+      final message = e is AppError ? e.message : 'Failed to rename';
       ToastService.error(context, message);
     }
   }

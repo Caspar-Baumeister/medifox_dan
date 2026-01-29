@@ -1,143 +1,49 @@
 /// Base class for all application errors.
-/// Provides user-friendly and debug messages.
 sealed class AppError implements Exception {
-  const AppError();
-
-  /// User-friendly message to display in the UI.
-  String get userMessage;
-
-  /// Detailed message for debugging purposes.
-  String get debugMessage;
-
-  @override
-  String toString() => debugMessage;
-}
-
-/// Error when the device is offline.
-class OfflineError extends AppError {
-  const OfflineError({this.details});
-
-  final String? details;
-
-  @override
-  String get userMessage => 'No internet connection';
-
-  @override
-  String get debugMessage =>
-      'OfflineError: No network connectivity${details != null ? ' ($details)' : ''}';
-}
-
-/// Error when a network request times out.
-class TimeoutError extends AppError {
-  const TimeoutError({this.operation});
-
-  final String? operation;
-
-  @override
-  String get userMessage => 'Connection timed out. Please try again.';
-
-  @override
-  String get debugMessage =>
-      'TimeoutError: ${operation ?? 'Request'} timed out';
-}
-
-/// Error from the server (5xx status codes).
-class ServerError extends AppError {
-  const ServerError({required this.statusCode, this.message});
-
-  final int statusCode;
-  final String? message;
-
-  @override
-  String get userMessage => 'Server error. Please try again later.';
-
-  @override
-  String get debugMessage =>
-      'ServerError: HTTP $statusCode${message != null ? ' - $message' : ''}';
-}
-
-/// Error from client request (4xx status codes).
-class ClientError extends AppError {
-  const ClientError({required this.statusCode, this.message});
-
-  final int statusCode;
-  final String? message;
-
-  @override
-  String get userMessage {
-    return switch (statusCode) {
-      400 => 'Invalid request',
-      401 => 'Authentication required',
-      403 => 'Access denied',
-      404 => 'Resource not found',
-      409 => 'Conflict with existing data',
-      422 => 'Invalid data provided',
-      429 => 'Too many requests. Please wait.',
-      _ => 'Request failed',
-    };
-  }
-
-  @override
-  String get debugMessage =>
-      'ClientError: HTTP $statusCode${message != null ? ' - $message' : ''}';
-}
-
-/// Error when parsing data fails.
-class ParsingError extends AppError {
-  const ParsingError({required this.message, this.source});
+  const AppError({required this.message, this.debugInfo});
 
   final String message;
-  final String? source;
+  final String? debugInfo;
 
   @override
-  String get userMessage => 'Failed to process server response';
-
-  @override
-  String get debugMessage =>
-      'ParsingError: $message${source != null ? ' (source: $source)' : ''}';
+  String toString() => debugInfo ?? message;
 }
 
-/// Error from database operations.
-class DatabaseError extends AppError {
-  const DatabaseError({required this.message, this.operation});
+/// Network-related errors (offline, timeout, HTTP errors).
+class NetworkError extends AppError {
+  const NetworkError({
+    required super.message,
+    super.debugInfo,
+    this.isOffline = false,
+  });
 
-  final String message;
-  final String? operation;
+  final bool isOffline;
 
-  @override
-  String get userMessage => 'Failed to save data locally';
+  /// Convenience constructors
+  const NetworkError.offline()
+    : isOffline = true,
+      super(message: 'No internet connection');
 
-  @override
-  String get debugMessage =>
-      'DatabaseError: ${operation ?? 'Operation'} failed - $message';
+  const NetworkError.timeout()
+    : isOffline = false,
+      super(message: 'Connection timed out. Please try again.');
+
+  const NetworkError.server({int? statusCode})
+    : isOffline = false,
+      super(
+        message: 'Server error. Please try again later.',
+        debugInfo: statusCode != null ? 'HTTP $statusCode' : null,
+      );
 }
 
-/// Error for validation failures (e.g., empty title).
+/// Validation errors (user input).
 class ValidationError extends AppError {
-  const ValidationError({required this.message, this.field});
-
-  final String message;
-  final String? field;
-
-  @override
-  String get userMessage => message;
-
-  @override
-  String get debugMessage =>
-      'ValidationError: $message${field != null ? ' (field: $field)' : ''}';
+  const ValidationError({required super.message, super.debugInfo});
 }
 
-/// Fallback error for unexpected cases.
-class UnknownError extends AppError {
-  const UnknownError({required this.message, this.originalError});
+/// Generic fallback error.
+class AppException extends AppError {
+  const AppException({required super.message, super.debugInfo, this.cause});
 
-  final String message;
-  final Object? originalError;
-
-  @override
-  String get userMessage => 'Something went wrong. Please try again.';
-
-  @override
-  String get debugMessage =>
-      'UnknownError: $message${originalError != null ? ' (original: $originalError)' : ''}';
+  final Object? cause;
 }

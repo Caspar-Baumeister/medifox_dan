@@ -34,15 +34,12 @@ class JsonPlaceholderTodosApi {
 
       final data = response.data;
       if (data == null) {
-        throw const ParsingError(message: 'Response data is null');
+        throw const AppException(message: 'Response data is null');
       }
 
       return data.map((item) {
         if (item is! Map<String, dynamic>) {
-          throw ParsingError(
-            message: 'Invalid item type: ${item.runtimeType}',
-            source: 'fetchTodos',
-          );
+          throw AppException(message: 'Invalid item type: ${item.runtimeType}');
         }
         return ApiTodo.fromJson(item);
       }).toList();
@@ -67,18 +64,12 @@ class JsonPlaceholderTodosApi {
 
       final data = response.data;
       if (data == null || data['id'] == null) {
-        throw const ParsingError(
-          message: 'Failed to create todo: no ID returned',
-          source: 'createTodo',
-        );
+        throw const AppException(message: 'Failed to create todo: no ID returned');
       }
 
       final id = data['id'];
       if (id is! int) {
-        throw ParsingError(
-          message: 'Invalid ID type: ${id.runtimeType}',
-          source: 'createTodo',
-        );
+        throw AppException(message: 'Invalid ID type: ${id.runtimeType}');
       }
 
       return id;
@@ -139,10 +130,7 @@ class ApiTodo {
         userId: json['userId'] as int,
       );
     } catch (e) {
-      throw ParsingError(
-        message: 'Failed to parse ApiTodo: $e',
-        source: json.toString(),
-      );
+      throw AppException(message: 'Failed to parse ApiTodo: $e', cause: e);
     }
   }
 

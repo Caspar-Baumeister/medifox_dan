@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/di/core_providers.dart';
+import '../../../core/core_provider/core_providers.dart';
 import '../data/local/drift_todo_repository.dart';
 import '../data/remote/jsonplaceholder_todos_api.dart';
 import '../data/todo_repository.dart';

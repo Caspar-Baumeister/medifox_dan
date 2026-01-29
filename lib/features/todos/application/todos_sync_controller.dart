@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/errors/app_error.dart';
+import '../domain/sync_summary.dart';
 import '../sync/todos_sync_engine.dart';
 import 'todos_providers.dart';
 
@@ -41,7 +42,7 @@ class TodosSyncController extends AsyncNotifier<SyncSummary?> {
       state = AsyncError(e, st);
       rethrow;
     } catch (e, st) {
-      final appError = UnknownError(message: e.toString(), originalError: e);
+      final appError = AppException(message: e.toString(), cause: e);
       state = AsyncError(appError, st);
       throw appError;
     }
@@ -73,7 +74,7 @@ class TodosSyncController extends AsyncNotifier<SyncSummary?> {
       state = AsyncError(e, st);
       rethrow;
     } catch (e, st) {
-      final appError = UnknownError(message: e.toString(), originalError: e);
+      final appError = AppException(message: e.toString(), cause: e);
       state = AsyncError(appError, st);
       throw appError;
     }
