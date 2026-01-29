@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/di/providers.dart';
 import '../../../core/errors/app_error.dart';
 import '../sync/todos_sync_engine.dart';
 import 'todos_providers.dart';
@@ -97,8 +96,8 @@ class TodosSyncController extends AsyncNotifier<SyncSummary?> {
 /// Provider for the sync controller.
 final todosSyncControllerProvider =
     AsyncNotifierProvider<TodosSyncController, SyncSummary?>(
-  TodosSyncController.new,
-);
+      TodosSyncController.new,
+    );
 
 /// Provider for the count of pending sync operations.
 final pendingSyncCountProvider = FutureProvider<int>((ref) async {

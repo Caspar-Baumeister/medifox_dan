@@ -1,22 +1,19 @@
 import 'package:flutter/material.dart';
 
-/// A centered empty state view with icon and message.
-class EmptyState extends StatelessWidget {
-  const EmptyState({
+/// A centered error view with icon, message, and optional retry button.
+class ErrorView extends StatelessWidget {
+  const ErrorView({
     super.key,
     required this.message,
-    this.icon = Icons.inbox_outlined,
-    this.action,
+    this.icon = Icons.error_outline,
+    this.onRetry,
+    this.retryLabel = 'Try Again',
   });
 
-  /// The message to display.
   final String message;
-
-  /// The icon to display above the message.
   final IconData icon;
-
-  /// Optional action widget (e.g., a button).
-  final Widget? action;
+  final VoidCallback? onRetry;
+  final String retryLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +25,7 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 64, color: theme.colorScheme.outline),
+            Icon(icon, size: 48, color: theme.colorScheme.error),
             const SizedBox(height: 16),
             Text(
               message,
@@ -37,9 +34,13 @@ class EmptyState extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            if (action != null) ...[
+            if (onRetry != null) ...[
               const SizedBox(height: 24),
-              action!,
+              FilledButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.refresh),
+                label: Text(retryLabel),
+              ),
             ],
           ],
         ),

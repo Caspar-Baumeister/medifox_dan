@@ -51,9 +51,9 @@ class TodosSyncEngine {
     required AppDatabase database,
     required JsonPlaceholderTodosApi api,
     required Connectivity connectivity,
-  })  : _database = database,
-        _api = api,
-        _connectivity = connectivity;
+  }) : _database = database,
+       _api = api,
+       _connectivity = connectivity;
 
   final AppDatabase _database;
   final JsonPlaceholderTodosApi _api;

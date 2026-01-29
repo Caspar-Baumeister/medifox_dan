@@ -3,7 +3,7 @@
 // This file exports all public APIs from the todos feature module.
 // Import this file instead of individual files for cleaner imports:
 //
-// import 'package:medifox_dan/features/todos/todos.dart';
+// import 'package:dofox_dan/features/todos/todos.dart';
 
 // Domain - Business entities
 export 'domain/domain.dart';

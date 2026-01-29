@@ -1,8 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../app/di/providers.dart';
 import '../data/todo_repository.dart';
 import '../domain/todo.dart';
+import 'todos_providers.dart';
 
 /// Exception thrown when todo validation fails.
 class TodoValidationException implements Exception {

@@ -2,29 +2,19 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-/// Type of toast message.
-enum ToastType {
-  success,
-  error,
-  warning,
-  info,
-}
+enum ToastType { success, error, warning, info }
 
 /// In-app toast service using Overlay.
-/// Shows toast messages at the top of the screen without affecting layout.
 class ToastService {
   static OverlayEntry? _currentEntry;
   static Timer? _dismissTimer;
 
-  /// Shows a toast message.
-  /// Only one toast is visible at a time; new toasts replace old ones.
   static void show(
     BuildContext context,
     String message, {
     ToastType type = ToastType.info,
     Duration duration = const Duration(seconds: 3),
   }) {
-    // Dismiss any existing toast
     dismiss();
 
     final overlay = Overlay.of(context);
@@ -38,12 +28,9 @@ class ToastService {
     );
 
     overlay.insert(_currentEntry!);
-
-    // Auto dismiss after duration
     _dismissTimer = Timer(duration, dismiss);
   }
 
-  /// Dismisses the current toast if any.
   static void dismiss() {
     _dismissTimer?.cancel();
     _dismissTimer = null;
@@ -51,22 +38,18 @@ class ToastService {
     _currentEntry = null;
   }
 
-  /// Shows a success toast.
   static void success(BuildContext context, String message) {
     show(context, message, type: ToastType.success);
   }
 
-  /// Shows an error toast.
   static void error(BuildContext context, String message) {
     show(context, message, type: ToastType.error, duration: const Duration(seconds: 4));
   }
 
-  /// Shows a warning toast.
   static void warning(BuildContext context, String message) {
     show(context, message, type: ToastType.warning);
   }
 
-  /// Shows an info toast.
   static void info(BuildContext context, String message) {
     show(context, message, type: ToastType.info);
   }
@@ -101,18 +84,12 @@ class _ToastWidgetState extends State<_ToastWidget>
       vsync: this,
     );
 
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOut,
-    );
+    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
 
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 1),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic));
 
     _controller.forward();
   }
@@ -159,16 +136,12 @@ class _ToastWidgetState extends State<_ToastWidget>
             child: GestureDetector(
               onTap: widget.onDismiss,
               onVerticalDragEnd: (details) {
-                // Swipe down to dismiss (since toast is at bottom)
                 if (details.velocity.pixelsPerSecond.dy > 0) {
                   widget.onDismiss();
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 decoration: BoxDecoration(
                   color: _backgroundColor,
                   borderRadius: BorderRadius.circular(12),
@@ -182,11 +155,7 @@ class _ToastWidgetState extends State<_ToastWidget>
                 ),
                 child: Row(
                   children: [
-                    Icon(
-                      _icon,
-                      color: Colors.white,
-                      size: 22,
-                    ),
+                    Icon(_icon, color: Colors.white, size: 22),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(

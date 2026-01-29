@@ -27,7 +27,6 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
   // ---------------------------------------------------------------------------
 
   /// Watches all non-deleted todos, ordered by created_at descending.
-  /// Using createdAt keeps the list stable when items are updated.
   Stream<List<TodosTableData>> watchTodos() {
     return (select(todosTable)
           ..where((t) => t.isDeleted.equals(false))
@@ -146,23 +145,20 @@ class TodosDao extends DatabaseAccessor<AppDatabase> with _$TodosDaoMixin {
   // IMPORT OPERATIONS
   // ---------------------------------------------------------------------------
 
-  /// Upserts an imported todo by remote ID (does not overwrite pending/failed local items).
+  /// Upserts an imported todo by remote ID.
   Future<void> upsertImportedTodo(
     TodosTableCompanion todo,
     int remoteId,
   ) async {
     final existing = await getTodoByRemoteId(remoteId);
     if (existing != null) {
-      // Don't overwrite if local item is pending or failed
       if (existing.syncState == 'pending' || existing.syncState == 'failed') {
         return;
       }
-      // Update existing synced item
       await (update(
         todosTable,
       )..where((t) => t.remoteId.equals(remoteId))).write(todo);
     } else {
-      // Insert new imported item
       await into(todosTable).insert(todo);
     }
   }
@@ -209,19 +205,16 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
   // STATUS UPDATES
   // ---------------------------------------------------------------------------
 
-  /// Marks an operation as in progress.
   Future<void> markOpInProgress(String opId) {
     return (update(syncOperationsTable)..where((o) => o.opId.equals(opId)))
         .write(const SyncOperationsTableCompanion(status: Value('inProgress')));
   }
 
-  /// Marks an operation as done.
   Future<void> markOpDone(String opId) {
     return (update(syncOperationsTable)..where((o) => o.opId.equals(opId)))
         .write(const SyncOperationsTableCompanion(status: Value('done')));
   }
 
-  /// Marks an operation as failed with error and increments retry count.
   Future<void> markOpFailed(String opId, String error) async {
     final existing = await (select(
       syncOperationsTable,
@@ -242,14 +235,12 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
   // DELETE OPERATIONS
   // ---------------------------------------------------------------------------
 
-  /// Deletes all operations for a specific todo.
   Future<void> deleteOpsForTodo(String todoLocalId) {
     return (delete(
       syncOperationsTable,
     )..where((o) => o.todoLocalId.equals(todoLocalId))).go();
   }
 
-  /// Deletes a specific operation.
   Future<void> deleteOp(String opId) {
     return (delete(
       syncOperationsTable,
@@ -260,13 +251,6 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
   // COALESCING ENQUEUE
   // ---------------------------------------------------------------------------
 
-  /// Enqueues a sync operation with coalescing logic.
-  ///
-  /// Coalescing rules:
-  /// - CREATE + UPDATE → Merge UPDATE into CREATE payload
-  /// - CREATE + DELETE → Remove CREATE, don't enqueue DELETE
-  /// - UPDATE + UPDATE → Keep only latest UPDATE
-  /// - DELETE → Remove any queued UPDATEs
   Future<void> enqueueOrCoalesce({
     required String opId,
     required String todoLocalId,
@@ -282,10 +266,8 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
         .firstOrNull;
     final hasQueuedCreate = existingCreateOp != null;
 
-    // Rule A: If there's a queued CREATE for this todo
     if (hasQueuedCreate) {
       if (type == 'update') {
-        // Merge UPDATE into CREATE payload
         final createPayload =
             jsonDecode(existingCreateOp.payloadJson) as Map<String, dynamic>;
         final mergedPayload = {...createPayload, ...payload};
@@ -299,9 +281,7 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
         return;
       }
       if (type == 'delete') {
-        // Remove CREATE op entirely - item never existed remotely
         await deleteOp(existingCreateOp.opId);
-        // Also remove any UPDATE ops
         for (final op in existingOps.where((o) => o.type == 'update')) {
           await deleteOp(op.opId);
         }
@@ -309,7 +289,6 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
       }
     }
 
-    // Rule B: If incoming is UPDATE and there's already a queued UPDATE
     if (type == 'update' && existingUpdateOp != null) {
       await (update(
         syncOperationsTable,
@@ -319,14 +298,12 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
       return;
     }
 
-    // Rule C: If incoming is DELETE, remove any queued UPDATE ops
     if (type == 'delete') {
       for (final op in existingOps.where((o) => o.type == 'update')) {
         await deleteOp(op.opId);
       }
     }
 
-    // Insert new operation
     await into(syncOperationsTable).insert(
       SyncOperationsTableCompanion(
         opId: Value(opId),
@@ -345,7 +322,6 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
 // DATABASE
 // =============================================================================
 
-/// The main application database.
 @DriftDatabase(
   tables: [TodosTable, SyncOperationsTable],
   daos: [TodosDao, SyncOpsDao],
@@ -353,7 +329,6 @@ class SyncOpsDao extends DatabaseAccessor<AppDatabase> with _$SyncOpsDaoMixin {
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
-  /// For testing - allows injecting a custom executor.
   AppDatabase.forTesting(super.e);
 
   @override
@@ -365,7 +340,6 @@ class AppDatabase extends _$AppDatabase {
       onCreate: (m) => m.createAll(),
       onUpgrade: (m, from, to) async {
         if (from < 2) {
-          // Migration v1 → v2: Add sync support
           await m.addColumn(todosTable, todosTable.remoteId);
           await m.addColumn(todosTable, todosTable.syncState);
           await m.addColumn(todosTable, todosTable.lastSyncError);
@@ -376,11 +350,10 @@ class AppDatabase extends _$AppDatabase {
   }
 }
 
-/// Opens a lazy database connection.
 LazyDatabase _openConnection() {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'medifox_dan.sqlite'));
+    final file = File(p.join(dbFolder.path, 'dofox_dan.sqlite'));
     return NativeDatabase.createInBackground(file);
   });
 }

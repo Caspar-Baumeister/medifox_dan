@@ -6,7 +6,7 @@
 // tree, read text, and verify that the values of widget properties are correct.
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:medifox_dan/features/todos/domain/todo.dart';
+import 'package:dofox_dan/features/todos/domain/todo.dart';
 
 void main() {
   group('Todo', () {

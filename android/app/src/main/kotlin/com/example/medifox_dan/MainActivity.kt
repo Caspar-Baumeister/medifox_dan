@@ -1,4 +1,4 @@
-package com.example.medifox_dan
+package com.example.dofox_dan
 
 import io.flutter.embedding.android.FlutterActivity
 

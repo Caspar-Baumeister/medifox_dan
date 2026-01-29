@@ -17,11 +17,16 @@ AppError mapToAppError(Object error, [StackTrace? stackTrace]) {
   }
 
   if (error is FormatException) {
-    return ParsingError(message: error.message, source: error.source?.toString());
+    return ParsingError(
+      message: error.message,
+      source: error.source?.toString(),
+    );
   }
 
   if (error is TypeError) {
-    return ParsingError(message: 'Type error during parsing: ${error.toString()}');
+    return ParsingError(
+      message: 'Type error during parsing: ${error.toString()}',
+    );
   }
 
   return UnknownError(message: error.toString(), originalError: error);

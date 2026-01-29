@@ -19,8 +19,8 @@ class DriftTodoRepository implements TodoRepository {
   @override
   Stream<List<Todo>> watchTodos() {
     return _todosDao.watchTodos().map(
-          (rows) => rows.map(_mapRowToTodo).toList(),
-        );
+      (rows) => rows.map(_mapRowToTodo).toList(),
+    );
   }
 
   @override
@@ -44,11 +44,7 @@ class DriftTodoRepository implements TodoRepository {
       opId: _uuid.v4(),
       todoLocalId: todo.id,
       type: 'create',
-      payload: {
-        'title': todo.title,
-        'completed': todo.completed,
-        'userId': 1,
-      },
+      payload: {'title': todo.title, 'completed': todo.completed, 'userId': 1},
     );
   }
 
@@ -72,10 +68,7 @@ class DriftTodoRepository implements TodoRepository {
       opId: _uuid.v4(),
       todoLocalId: todo.id,
       type: 'update',
-      payload: {
-        'title': todo.title,
-        'completed': todo.completed,
-      },
+      payload: {'title': todo.title, 'completed': todo.completed},
     );
   }
 
@@ -87,23 +80,22 @@ class DriftTodoRepository implements TodoRepository {
     final newCompleted = !existing.completed;
 
     // Update todo with pending sync state
-    await _todosDao.updateTodo(TodosTableCompanion(
-      localId: Value(id),
-      completed: Value(newCompleted),
-      updatedAt: Value(DateTime.now()),
-      syncState: const Value('pending'),
-      lastSyncError: const Value(null),
-    ));
+    await _todosDao.updateTodo(
+      TodosTableCompanion(
+        localId: Value(id),
+        completed: Value(newCompleted),
+        updatedAt: Value(DateTime.now()),
+        syncState: const Value('pending'),
+        lastSyncError: const Value(null),
+      ),
+    );
 
     // Enqueue UPDATE sync operation
     await _syncOpsDao.enqueueOrCoalesce(
       opId: _uuid.v4(),
       todoLocalId: id,
       type: 'update',
-      payload: {
-        'title': existing.title,
-        'completed': newCompleted,
-      },
+      payload: {'title': existing.title, 'completed': newCompleted},
     );
   }
 
